@@ -117,14 +117,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         img = inputFrame.rgba();
         Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_BGR2GRAY);
+        Imgproc.GaussianBlur(imgGray, imgGray, new Size(7,7), 0);
 
         Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(24, 24));
         Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12, 12));
 
-        Imgproc.cvtColor(imgGray, imgCanny, 50, 100);
+        Imgproc.Canny(imgGray, imgCanny, 50, 150);
+        /*
         Imgproc.dilate(imgCanny, null, erodeElement);
         Imgproc.erode(imgCanny, null, dilateElement);
-
+        */
         /*
         List<MatOfPoint> cnts = new ArrayList<>();
         Mat hierarchy = new Mat();
