@@ -29,6 +29,7 @@ import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
@@ -118,21 +119,27 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         img = inputFrame.rgba();
         Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_BGR2GRAY);
         Imgproc.GaussianBlur(imgGray, imgGray, new Size(7,7), 0);
+        Imgproc.Canny(imgGray, imgCanny, 50, 100);
 
         Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(24, 24));
         Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12, 12));
 
-        Imgproc.Canny(imgGray, imgCanny, 50, 100);
-        Imgproc.dilate(imgCanny, imgCanny, erodeElement);
+        Imgproc.erode(imgCanny, imgCanny, dilateElement);
         Imgproc.erode(imgCanny, imgCanny, dilateElement);
 
+        Imgproc.dilate(imgCanny, imgCanny, erodeElement);
+        Imgproc.dilate(imgCanny, imgCanny, erodeElement);
 
         List<MatOfPoint> cnts = new ArrayList<>();
         Mat hierarchy = new Mat();
         Imgproc.findContours(imgCanny, cnts, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-        for (int i=0; i<cnts.size(); i++)
-            Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
+        for (MatOfPoint c : cnts) {
+            if (Imgproc.contourArea(c) < 100)
+                continue;
+            Imgproc.fillPoly(img, Arrays.asList(c), new Scalar(0,0,0));
+        }
+        Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
 
         /*
         MatOfPoint2f points = new MatOfPoint2f(new Point(1, 1), new Point(5, 1), new Point(4, 3), new Point(6, 2));
