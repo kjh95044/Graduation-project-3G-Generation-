@@ -1,0 +1,9 @@
+<toolSet name="External Tools">
+  <tool name="javah" description="Android Tool - javah" showInMainMenu="false" showInEditor="false" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="D:\Program Files\Android\jre\bin\javah.exe" />
+      <option name="PARAMETERS" value="-classpath &quot;$Classpath$&quot; -v -jni $FileClass$" />
+      <option name="WORKING_DIRECTORY" value="D:/Users/Hong/Graduation-project-3G-Generation-/app/src/main/jni" />
+    </exec>
+  </tool>
+</toolSet>
