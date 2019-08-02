@@ -17,13 +17,22 @@ import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.core.Core;
+import org.opencv.core.Point;
+import org.opencv.core.Size;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
     private static String TAG = "MainActivity";
     JavaCameraView javaCameraView;
-    Mat mRgba, imgGray, imgCanny;
+    Mat img, imgGray, imgCanny;
 
     BaseLoaderCallback mLoaderCallBack = new BaseLoaderCallback(this) {
         @Override
@@ -92,26 +101,47 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     public void onCameraViewStarted(int width, int height) {
-        mRgba = new Mat(height, width, CvType.CV_8UC4);
+        img = new Mat(height, width, CvType.CV_8UC4);
         imgGray = new Mat(height, width, CvType.CV_8UC1);
         imgCanny = new Mat(height, width, CvType.CV_8UC1);
-
     }
 
     @Override
     public void onCameraViewStopped() {
-        mRgba.release();
+        img.release();
     }
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        mRgba = inputFrame.rgba();
+        img = inputFrame.rgba();
+        Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_BGR2GRAY);
+
+        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(24, 24));
+        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12, 12));
+
+        Imgproc.cvtColor(imgGray, imgCanny, 50, 100);
+        Imgproc.dilate(imgCanny, null, erodeElement);
+        Imgproc.erode(imgCanny, null, dilateElement);
+
+        List<MatOfPoint> cnts = new ArrayList<>();
+        Mat hierarchy = new Mat();
+        Imgproc.findContours(imgCanny, cnts, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+        Imgproc.drawContours(img, cnts, -1, new Scalar(255, 255, 0));
+        /*
+        if (hierarchy.size().height > 0 && hierarchy.size().width > 0) {
+            for (int idx=0; idx>=0; idx=(int) hierarchy.get(0,idx)[0]) {
+                //Imgproc.drawContours(img, cnts, idx, new Scalar(250, 0, 0));
+            }
+        }
+        */
 
         //Imgproc.cvtColor(mRgba, imgGray, Imgproc.COLOR_RGB2GRAY);
         //Imgproc.Canny(imgGray, imgCanny, 50, 150)
 
-        return mRgba;
+        return img;
     }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
     //여기서부턴 퍼미션 관련 메소드
     static final int PERMISSIONS_REQUEST_CODE = 1000;
@@ -137,7 +167,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
         switch(requestCode){
-
             case PERMISSIONS_REQUEST_CODE:
                 if (grantResults.length > 0) {
                     boolean cameraPermissionAccepted = grantResults[0]
@@ -169,9 +198,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         });
         builder.create().show();
     }
-
-
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
 import android.annotation.TargetApi;
