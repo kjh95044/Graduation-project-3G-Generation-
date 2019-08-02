@@ -122,12 +122,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(24, 24));
         Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12, 12));
 
-        Imgproc.Canny(imgGray, imgCanny, 50, 150);
-        /*
-        Imgproc.dilate(imgCanny, null, erodeElement);
-        Imgproc.erode(imgCanny, null, dilateElement);
-        */
-        /*
+        Imgproc.Canny(imgGray, imgCanny, 50, 100);
+        Imgproc.dilate(imgCanny, imgCanny, erodeElement);
+        Imgproc.erode(imgCanny, imgCanny, dilateElement);
+
+
         List<MatOfPoint> cnts = new ArrayList<>();
         Mat hierarchy = new Mat();
         Imgproc.findContours(imgCanny, cnts, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
@@ -136,6 +135,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         MatOfPoint2f points = new MatOfPoint2f(new Point(1, 1), new Point(5, 1), new Point(4, 3), new Point(6, 2));
         RotatedRect rect = Imgproc.minAreaRect(points);
 
+        /*
         Point vertices[] = new Point[4];
         rect.points(vertices);
         for(int i=0; i<4; ++i){
@@ -150,7 +150,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }X
         */
 
-        return imgCanny;
+        return img;
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
