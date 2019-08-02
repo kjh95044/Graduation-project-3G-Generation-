@@ -130,18 +130,22 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         List<MatOfPoint> cnts = new ArrayList<>();
         Mat hierarchy = new Mat();
         Imgproc.findContours(imgCanny, cnts, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-        Imgproc.drawContours(img, cnts, -1, new Scalar(255, 255, 0));
 
+        for (int i=0; i<cnts.size(); i++)
+            Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
+
+        /*
         MatOfPoint2f points = new MatOfPoint2f(new Point(1, 1), new Point(5, 1), new Point(4, 3), new Point(6, 2));
         RotatedRect rect = Imgproc.minAreaRect(points);
 
-        /*
+
         Point vertices[] = new Point[4];
         rect.points(vertices);
         for(int i=0; i<4; ++i){
             Imgproc.line(img, vertices[i], vertices[(i+1)%4], new Scalar(255,255,255));
         }
         */
+
         /*
         if (hierarchy.size().height > 0 && hierarchy.size().width > 0) {
             for (int idx=0; idx>=0; idx=(int) hierarchy.get(0,idx)[0]) {
