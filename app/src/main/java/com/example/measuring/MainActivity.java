@@ -20,6 +20,7 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
+import org.opencv.core.Rect;
 import org.opencv.core.RotatedRect;
 import org.opencv.core.Size;
 import org.opencv.core.CvType;
@@ -131,15 +132,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.dilate(imgCanny, imgCanny, erodeElement);
 
         List<MatOfPoint> cnts = new ArrayList<>();
-        Mat hierarchy = new Mat();
-        Imgproc.findContours(imgCanny, cnts, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+        Imgproc.findContours(imgCanny, cnts, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-        for (MatOfPoint c : cnts) {
-            if (Imgproc.contourArea(c) < 100)
-                continue;
-            Imgproc.fillPoly(img, Arrays.asList(c), new Scalar(0,0,0));
+        for (int i=0; i<cnts.size(); i++) {
+            if (Imgproc.contourArea(cnts.get(i)) > 100) {
+                Rect rect = Imgproc.boundingRect(cnts.get(i));
+                Imgproc.rectangle(img, new Point(rect.x, rect.y), new Point(rect.x+rect.width, rect.y+rect.height), new Scalar(0, 0, 255));
+            }
         }
-        Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
+
+        //Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
 
         /*
         MatOfPoint2f points = new MatOfPoint2f(new Point(1, 1), new Point(5, 1), new Point(4, 3), new Point(6, 2));
