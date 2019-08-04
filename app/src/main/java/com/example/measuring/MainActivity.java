@@ -18,6 +18,7 @@ import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
+import org.opencv.core.MatOfByte;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
@@ -132,14 +133,26 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.dilate(imgCanny, imgCanny, erodeElement);
 
         List<MatOfPoint> cnts = new ArrayList<>();
+        Mat hierarchy = new Mat();
         Imgproc.findContours(imgCanny, cnts, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+        //List<Point> box = new ArrayList<Point>();
 
         for (int i=0; i<cnts.size(); i++) {
-            if (Imgproc.contourArea(cnts.get(i)) > 100) {
+            if (cnts.get(i).total() > 30) {
+                MatOfPoint2f approxCurve = new MatOfPoint2f();
+                MatOfPoint2f cnts2f = new MatOfPoint2f(cnts.get(i).toArray());
+
+                double approxDistance = Imgproc.arcLength(cnts2f, true) * 0.02;
+                Imgproc.approxPolyDP(cnts2f, approxCurve, approxDistance, true);
+
+                MatOfPoint points = new MatOfPoint(approxCurve.toArray());
+
                 Rect rect = Imgproc.boundingRect(cnts.get(i));
-                Imgproc.rectangle(img, new Point(rect.x, rect.y), new Point(rect.x+rect.width, rect.y+rect.height), new Scalar(0, 0, 255));
+                Imgproc.rectangle(img, new Point(rect.x, rect.y), new Point(rect.x+rect.width, rect.y+rect.height), new Scalar(0, 0, 255), 10);
+
             }
         }
+
 
         //Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
 
