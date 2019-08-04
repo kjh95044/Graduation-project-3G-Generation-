@@ -121,16 +121,15 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         img = inputFrame.rgba();
         Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_BGR2GRAY);
         Imgproc.GaussianBlur(imgGray, imgGray, new Size(7,7), 0);
-        Imgproc.Canny(imgGray, imgCanny, 50, 100);
+        Imgproc.Canny(imgGray, imgCanny, 10, 100);
 
-        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(24, 24));
-        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12, 12));
 
-        Imgproc.erode(imgCanny, imgCanny, dilateElement);
-        Imgproc.erode(imgCanny, imgCanny, dilateElement);
+        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(30, 30));
+        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(30, 30));
 
         Imgproc.dilate(imgCanny, imgCanny, erodeElement);
-        Imgproc.dilate(imgCanny, imgCanny, erodeElement);
+        Imgproc.erode(imgCanny, imgCanny, dilateElement);
+
 
         List<MatOfPoint> cnts = new ArrayList<>();
         Mat hierarchy = new Mat();
@@ -152,6 +151,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
             }
         }
+
 
 
         //Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
