@@ -1,8 +1,13 @@
 package com.example.measuring;
 
 import android.annotation.TargetApi;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
@@ -10,7 +15,9 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.SurfaceView;
+import android.view.View;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -35,6 +42,13 @@ import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
+    // 자이로/가속도 센서 사용
+    private SensorManager mSensorManager = null;
+
+    // 가속도 센서 사용
+    private SensorEventListener mAccLis;
+    private Sensor mAccelometerSensor = null;
+
     private static String TAG = "MainActivity";
     JavaCameraView javaCameraView;
     Mat img, imgGray, imgCanny;
@@ -64,6 +78,34 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // 가속도/자이로 센서 사용
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+
+        // 가속도 센서 사용
+        mAccelometerSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        mAccLis = new AccelometerListener();
+
+
+        //Touch Listener for Accelometer
+        findViewById(R.id.accel_measure).setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+
+                    case MotionEvent.ACTION_DOWN:
+                        mSensorManager.registerListener(mAccLis, mAccelometerSensor, SensorManager.SENSOR_DELAY_UI);
+                        break;
+
+                    case MotionEvent.ACTION_UP:
+                        mSensorManager.unregisterListener(mAccLis);
+                        break;
+
+                }
+                return false;
+            }
+        });
+
+
         javaCameraView = (JavaCameraView) findViewById(R.id.java_camera_view);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCvCameraViewListener(this);
@@ -82,6 +124,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onPause();
         if (javaCameraView != null)
             javaCameraView.disableView();
+        Log.e("LOG", "onPause()");
+        mSensorManager.unregisterListener(mAccLis);
     }
 
     @Override
@@ -89,6 +133,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onDestroy();
         if (javaCameraView != null)
             javaCameraView.disableView();
+        Log.e("LOG", "onDestroy()");
+        mSensorManager.unregisterListener(mAccLis);
     }
 
     @Override
@@ -118,65 +164,71 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        double reference = 0, dimA = 0, dimB = 0;
         img = inputFrame.rgba();
-        Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_BGR2GRAY);
+        Imgproc.cvtColor(img, img, Imgproc.COLOR_BGR2RGBA);
+        Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_RGBA2GRAY);
         Imgproc.GaussianBlur(imgGray, imgGray, new Size(7,7), 0);
-        Imgproc.Canny(imgGray, imgCanny, 10, 100);
+        Imgproc.Canny(imgGray, imgCanny, 50, 100);
 
+        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12,12));
+        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12,12));
 
-        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(30, 30));
-        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(30, 30));
+        Imgproc.dilate(imgCanny, imgCanny, dilateElement);
+        Imgproc.erode(imgCanny, imgCanny, erodeElement);
 
-        Imgproc.dilate(imgCanny, imgCanny, erodeElement);
-        Imgproc.erode(imgCanny, imgCanny, dilateElement);
 
 
         List<MatOfPoint> cnts = new ArrayList<>();
-        Mat hierarchy = new Mat();
         Imgproc.findContours(imgCanny, cnts, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+        //Imgproc.drawContours(img, cnts, -1, new Scalar(255,255,255));
+        for (MatOfPoint c : cnts)
+            Imgproc.fillPoly(imgCanny, Arrays.asList(c), new Scalar(255,255,255));
         //List<Point> box = new ArrayList<Point>();
 
         for (int i=0; i<cnts.size(); i++) {
-            if (cnts.get(i).total() > 30) {
-                MatOfPoint2f approxCurve = new MatOfPoint2f();
-                MatOfPoint2f cnts2f = new MatOfPoint2f(cnts.get(i).toArray());
+            if (Imgproc.contourArea(cnts.get(i)) > 130 && Imgproc.contourArea(cnts.get(i)) < 300) {
+                //int maxId = cnts.indexOf(cnts);
+                MatOfPoint maxMatOfPoint = cnts.get(i);
+                MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                RotatedRect rect = Imgproc.minAreaRect(maxMatOfPoint2f);
 
-                double approxDistance = Imgproc.arcLength(cnts2f, true) * 0.02;
-                Imgproc.approxPolyDP(cnts2f, approxCurve, approxDistance, true);
+                Point points[] = new Point[4];
+                rect.points(points);
+                for (int j=0; j<4; j++) {
+                    Imgproc.line(img, points[j], points[(j + 1) % 4], new Scalar(0, 255, 0), 8);
+                    Imgproc.circle(img, new Point(points[j].x, points[j].y), 5, new Scalar(0, 0, 255), 8);
+                    Imgproc.circle(img, midPoint(points[j], points[(j+1)%4]), 5, new Scalar(255,0,0), 8);
+                }
+                for (int j=0; j<2; j++)
+                    Imgproc.line(img, midPoint(points[j%4], points[(j+1)%4]), midPoint(points[(j+2)%4], points[(j+3)%4]), new Scalar(255,0,255), 8);
 
-                MatOfPoint points = new MatOfPoint(approxCurve.toArray());
+                double dA = euclidean(midPoint(points[0], points[1]), midPoint(points[2], points[3]));
+                double dB = euclidean(midPoint(points[0], points[3]), midPoint(points[1], points[2]));
 
-                Rect rect = Imgproc.boundingRect(cnts.get(i));
-                Imgproc.rectangle(img, new Point(rect.x, rect.y), new Point(rect.x+rect.width, rect.y+rect.height), new Scalar(0, 0, 255), 10);
+                if (i == 0 || reference == 0)
+                    reference = dB / 2.4;
 
+                dimA = dA / reference;
+                dimB = dB / reference;
+
+                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
+                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
             }
         }
-
-
-
-        //Imgproc.drawContours(img, cnts, -1, new Scalar(255, 0, 0));
-
-        /*
-        MatOfPoint2f points = new MatOfPoint2f(new Point(1, 1), new Point(5, 1), new Point(4, 3), new Point(6, 2));
-        RotatedRect rect = Imgproc.minAreaRect(points);
-
-
-        Point vertices[] = new Point[4];
-        rect.points(vertices);
-        for(int i=0; i<4; ++i){
-            Imgproc.line(img, vertices[i], vertices[(i+1)%4], new Scalar(255,255,255));
-        }
-        */
-
-        /*
-        if (hierarchy.size().height > 0 && hierarchy.size().width > 0) {
-            for (int idx=0; idx>=0; idx=(int) hierarchy.get(0,idx)[0]) {
-                //Imgproc.drawContours(img, cnts, idx, new Scalar(250, 0, 0));
-            }
-        }X
-        */
-
         return img;
+    }
+
+    public Point midPoint(Point a, Point b) {
+        return new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
+    }
+
+    public double euclidean(Point a, Point b) {
+        return square(a.x - b.x) + square(a.y - b.y);
+    }
+
+    public double square(double x) {
+        return x * x;
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -235,6 +287,32 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             }
         });
         builder.create().show();
+    }
+
+    private class AccelometerListener implements SensorEventListener {
+
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+
+            double accX = event.values[0];
+            double accY = event.values[1];
+            double accZ = event.values[2];
+
+            double angleXZ = Math.atan2(accX,  accZ) * 180/Math.PI;
+            double angleYZ = Math.atan2(accY,  accZ) * 180/Math.PI;
+
+            Log.e("LOG", "ACCELOMETER           [X]:" + String.format("%.4f", event.values[0])
+                    + "           [Y]:" + String.format("%.4f", event.values[1])
+                    + "           [Z]:" + String.format("%.4f", event.values[2])
+                    + "           [angleXZ]: " + String.format("%.4f", angleXZ)
+                    + "           [angleYZ]: " + String.format("%.4f", angleYZ));
+
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+        }
     }
 }
 
