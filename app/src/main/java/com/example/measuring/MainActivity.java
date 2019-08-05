@@ -224,10 +224,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         img = inputFrame.rgba();
         Imgproc.cvtColor(img, img, Imgproc.COLOR_RGBA2BGR);
         Imgproc.cvtColor(img, imgHSV, Imgproc.COLOR_BGR2HSV);
-        Core.inRange(imgHSV, new Scalar(70,70,70), new Scalar(255,255,255), threshold);
+        Imgproc.cvtColor(img, img, Imgproc.COLOR_BGR2RGBA);
+        Core.inRange(imgHSV, new Scalar(50,50,50), new Scalar(255,255,255), threshold);
 
-        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5,5));
-        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5,5));
+        Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,5));
+        Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,5));
 
         Imgproc.erode(threshold, threshold, erodeElement);
         Imgproc.dilate(threshold, threshold, dilateElement);
@@ -243,7 +244,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //List<Point> box = new ArrayList<Point>();
 
         for (int i=0; i<cnts.size(); i++) {
-            if (Imgproc.contourArea(cnts.get(i)) > 720) {
+            if (Imgproc.contourArea(cnts.get(i)) > 10) {
                 //int maxId = cnts.indexOf(cnts);
                 MatOfPoint maxMatOfPoint = cnts.get(i);
                 MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
