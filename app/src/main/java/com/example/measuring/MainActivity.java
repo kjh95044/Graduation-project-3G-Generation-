@@ -18,6 +18,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.View;
+import android.widget.Button;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -52,8 +53,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     */
     private static String TAG = "MainActivity";
     JavaCameraView javaCameraView;
+    Button EstimateButton;
     Mat img, imgGray, imgCanny, imgHSV, threshold;
-    int counter = 0;
+    int counter = 0, object_num = 3;
+    boolean estimate_flag = false;
 
     BaseLoaderCallback mLoaderCallBack = new BaseLoaderCallback(this) {
         @Override
@@ -76,7 +79,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Button EstimateButton;
         setContentView(R.layout.activity_main);
+
+        EstimateButton = (Button) this.findViewById(R.id.BtnEstimate);
+
+        EstimateButton.setOnClickListener(click);
         /*
         // 가속도/자이로 센서 사용
         mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -113,6 +121,20 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             }
         }
     }
+
+    private View.OnClickListener click = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            switch (v.getId()){
+                case R.id.BtnEstimate:
+                    estimate_flag = !estimate_flag;
+                    break;
+                default :
+                    break;
+            }
+
+        }
+    };
 
     @Override
     protected void onPause() {
@@ -222,12 +244,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         double reference = 0, dimA = 0, dimB = 0;
+        int object_counter = 0;
         img = inputFrame.rgba();
         Imgproc.cvtColor(img, img, Imgproc.COLOR_RGBA2BGR);
         Imgproc.cvtColor(img, imgHSV, Imgproc.COLOR_BGR2HSV);
         Imgproc.cvtColor(img, img, Imgproc.COLOR_BGR2RGBA);
-        // Best : (40,20,0) (180,255,255)
-        // Secong: (30,0,0) (180,255,255)
+
+        // Best : (0,30,0) (180,255,255)
+        // Second: (40,20,0) (180,255,255)
         // Hue : 색상(색의 질)
         // Saturation : 채도(높아질수록 잡티 심해짐)
         // Value : 명도(밝기)
@@ -257,33 +281,35 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Imgproc.fillPoly(threshold, Arrays.asList(c), new Scalar(255,255,255));
         //List<Point> box = new ArrayList<Point>();
 
-        for (int i=0; i<cnts.size(); i++) {
-            if (Imgproc.contourArea(cnts.get(i)) > 200) {
-                MatOfPoint maxMatOfPoint = cnts.get(i);
-                MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
-                RotatedRect rect = Imgproc.minAreaRect(maxMatOfPoint2f);
+        if (estimate_flag) {
+            for (int i = 0; i < cnts.size(); i++) {
+                if (Imgproc.contourArea(cnts.get(i)) > 200) {
+                    MatOfPoint maxMatOfPoint = cnts.get(i);
+                    MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                    RotatedRect rect = Imgproc.minAreaRect(maxMatOfPoint2f);
 
-                Point points[] = new Point[4];
-                rect.points(points);
-                for (int j = 0; j < 4; j++) {
-                    Imgproc.line(img, points[j], points[(j + 1) % 4], new Scalar(0, 255, 0), 8);
-                    Imgproc.circle(img, new Point(points[j].x, points[j].y), 5, new Scalar(0, 0, 255), 8);
-                    Imgproc.circle(img, midPoint(points[j], points[(j + 1) % 4]), 5, new Scalar(255, 0, 0), 8);
+                    Point points[] = new Point[4];
+                    rect.points(points);
+                    for (int j = 0; j < 4; j++) {
+                        Imgproc.line(img, points[j], points[(j + 1) % 4], new Scalar(0, 255, 0), 8);
+                        Imgproc.circle(img, new Point(points[j].x, points[j].y), 5, new Scalar(0, 0, 255), 8);
+                        Imgproc.circle(img, midPoint(points[j], points[(j + 1) % 4]), 5, new Scalar(255, 0, 0), 8);
+                    }
+                    for (int j = 0; j < 2; j++)
+                        Imgproc.line(img, midPoint(points[j % 4], points[(j + 1) % 4]), midPoint(points[(j + 2) % 4], points[(j + 3) % 4]), new Scalar(255, 0, 255), 8);
+
+                    double dA = euclidean(midPoint(points[0], points[1]), midPoint(points[2], points[3]));
+                    double dB = euclidean(midPoint(points[0], points[3]), midPoint(points[1], points[2]));
+
+                    if (i == 0 || reference == 0)
+                        reference = dB / 2.4;
+
+                    dimA = dA / reference;
+                    dimB = dB / reference;
+
+                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                 }
-                for (int j = 0; j < 2; j++)
-                    Imgproc.line(img, midPoint(points[j % 4], points[(j + 1) % 4]), midPoint(points[(j + 2) % 4], points[(j + 3) % 4]), new Scalar(255, 0, 255), 8);
-
-                double dA = euclidean(midPoint(points[0], points[1]), midPoint(points[2], points[3]));
-                double dB = euclidean(midPoint(points[0], points[3]), midPoint(points[1], points[2]));
-
-                if (i == 0 || reference == 0)
-                    reference = dB / 2.4;
-
-                dimA = dA / reference;
-                dimB = dB / reference;
-
-                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
             }
         }
         this.counter++;
