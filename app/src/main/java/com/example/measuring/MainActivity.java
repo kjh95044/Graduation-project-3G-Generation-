@@ -53,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private static String TAG = "MainActivity";
     JavaCameraView javaCameraView;
     Mat img, imgGray, imgCanny, imgHSV, threshold;
+    int counter = 0;
 
     BaseLoaderCallback mLoaderCallBack = new BaseLoaderCallback(this) {
         @Override
@@ -225,7 +226,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.cvtColor(img, img, Imgproc.COLOR_RGBA2BGR);
         Imgproc.cvtColor(img, imgHSV, Imgproc.COLOR_BGR2HSV);
         Imgproc.cvtColor(img, img, Imgproc.COLOR_BGR2RGBA);
-        Core.inRange(imgHSV, new Scalar(50,50,50), new Scalar(255,255,255), threshold);
+        // Best : (40,20,0) (180,255,255)
+        // Secong: (30,0,0) (180,255,255)
+        // Hue : 색상(색의 질)
+        // Saturation : 채도(높아질수록 잡티 심해짐)
+        // Value : 명도(밝기)
+        Core.inRange(imgHSV, new Scalar(0,30,0), new Scalar(180,255,255), threshold);
 
         Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,5));
         Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,5));
@@ -233,8 +239,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.erode(threshold, threshold, erodeElement);
         Imgproc.dilate(threshold, threshold, dilateElement);
 
+        Imgproc.erode(threshold, threshold, erodeElement);
+        Imgproc.dilate(threshold, threshold, dilateElement);
+
+
         Imgproc.dilate(threshold, threshold, dilateElement);
         Imgproc.erode(threshold, threshold, erodeElement);
+
+        Imgproc.dilate(threshold, threshold, dilateElement);
+        Imgproc.erode(threshold, threshold, erodeElement);
+
 
         List<MatOfPoint> cnts = new ArrayList<>();
         Imgproc.findContours(threshold, cnts, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
@@ -244,21 +258,20 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //List<Point> box = new ArrayList<Point>();
 
         for (int i=0; i<cnts.size(); i++) {
-            if (Imgproc.contourArea(cnts.get(i)) > 10) {
-                //int maxId = cnts.indexOf(cnts);
+            if (Imgproc.contourArea(cnts.get(i)) > 200) {
                 MatOfPoint maxMatOfPoint = cnts.get(i);
                 MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
                 RotatedRect rect = Imgproc.minAreaRect(maxMatOfPoint2f);
 
                 Point points[] = new Point[4];
                 rect.points(points);
-                for (int j=0; j<4; j++) {
+                for (int j = 0; j < 4; j++) {
                     Imgproc.line(img, points[j], points[(j + 1) % 4], new Scalar(0, 255, 0), 8);
                     Imgproc.circle(img, new Point(points[j].x, points[j].y), 5, new Scalar(0, 0, 255), 8);
-                    Imgproc.circle(img, midPoint(points[j], points[(j+1)%4]), 5, new Scalar(255,0,0), 8);
+                    Imgproc.circle(img, midPoint(points[j], points[(j + 1) % 4]), 5, new Scalar(255, 0, 0), 8);
                 }
-                for (int j=0; j<2; j++)
-                    Imgproc.line(img, midPoint(points[j%4], points[(j+1)%4]), midPoint(points[(j+2)%4], points[(j+3)%4]), new Scalar(255,0,255), 8);
+                for (int j = 0; j < 2; j++)
+                    Imgproc.line(img, midPoint(points[j % 4], points[(j + 1) % 4]), midPoint(points[(j + 2) % 4], points[(j + 3) % 4]), new Scalar(255, 0, 255), 8);
 
                 double dA = euclidean(midPoint(points[0], points[1]), midPoint(points[2], points[3]));
                 double dB = euclidean(midPoint(points[0], points[3]), midPoint(points[1], points[2]));
@@ -269,10 +282,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 dimA = dA / reference;
                 dimB = dB / reference;
 
-                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
-                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
+                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
             }
         }
+        this.counter++;
         return img;
         //return threshold;
     }
@@ -282,7 +296,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     public double euclidean(Point a, Point b) {
-        return square(a.x - b.x) + square(a.y - b.y);
+        return Math.sqrt(square(a.x - b.x) + square(a.y - b.y));
     }
 
     public double square(double x) {
