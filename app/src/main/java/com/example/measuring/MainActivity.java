@@ -2,7 +2,6 @@ package com.example.measuring;
 
 import android.annotation.TargetApi;
 import android.app.Application;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -11,18 +10,14 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.media.MediaActionSound;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
-import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.View;
 import android.widget.Button;
@@ -33,10 +28,8 @@ import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
-import org.opencv.core.MatOfByte;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
-import org.opencv.core.Rect;
 import org.opencv.core.RotatedRect;
 import org.opencv.core.Size;
 import org.opencv.core.CvType;
@@ -48,46 +41,37 @@ import org.opencv.imgproc.Imgproc;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Date;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
+    private static String TAG = "MainActivity";
+    JavaCameraView javaCameraView;
+    Button EstimateButton;
+    Mat img, imgGray, imgCanny, imgHSV, threshold;
+    boolean estimate_flag = false;
+    Point refPoint[] = new Point[4];
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // 자이로/가속도 센서 사용
+    /** 자이로/가속도 센서 사용*/
     private SensorManager mSensorManager = null;
-    private SensorEventListener mAccLis, mGyroLis;
     private UserSensorListener userSensorListener;
     private Sensor mAccelometerSensor = null;
     private Sensor mGyroSensor = null;
 
-    // 센서 변수들
+    /** 센서 변수들 */
     private float[] mGyroValues = new float[3];
     private float[] mAccValues = new float[3];
-    private double mAccPitch, mAccRoll, mAccYaw;
+    private double mAccPitch, mAccRoll;
 
-    /*
-    private double accX, accY, accZ, angleXZ, angleYZ;
-    private double pitch, roll, yaw;
-    private double timestamp, dt;
-    */
 
-    // 보수 필터에 사용
+    /** 보수 필터에 사용 */
     private float a = 0.2f;
-    private double RAD2DGR = 180 / Math.PI;
     private static final float NS2S = 1.0f/1000000000.0f;
     private double pitch = 0, roll = 0, yaw = 0;
     private double timestamp, dt, temp, runing;
     private boolean gyroRunning, accRunning;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
-
-    private static String TAG = "MainActivity";
-    JavaCameraView javaCameraView;
-    MyCameraActivity camActivity;
-    Button EstimateButton;
-    Mat img, imgGray, imgCanny, imgHSV, threshold;
-    int counter = 0, object_num = 3;
-    boolean estimate_flag = false;
 
     BaseLoaderCallback mLoaderCallBack = new BaseLoaderCallback(this) {
         @Override
@@ -113,26 +97,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         setContentView(R.layout.activity_main);
 
         EstimateButton = (Button) this.findViewById(R.id.BtnEstimate);
-        //CaptureButton = (Button) this.findViewById(R.id.BtnCapture);
-
         EstimateButton.setOnClickListener(click);
-        //CaptureButton.setOnClickListener(click);
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-
-        // 가속도/자이로 센서 사용
-        //mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        mSensorManager = (SensorManager) getSystemService(Application.SENSOR_SERVICE);
-        userSensorListener  = new UserSensorListener();
-        mAccelometerSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        mGyroSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-
-        /*
-        mAccLis = new AccelometerListener();
-        mGyroLis = new GyroscopeListener();
-        */
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
         javaCameraView = (JavaCameraView) findViewById(R.id.java_camera_view);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
@@ -145,6 +110,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 requestPermissions(PERMISSIONS, PERMISSIONS_REQUEST_CODE);
             }
         }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        /** 가속도/자이로 센서 사용 */
+        mSensorManager = (SensorManager) getSystemService(Application.SENSOR_SERVICE);
+        userSensorListener  = new UserSensorListener();
+        mAccelometerSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        mGyroSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
     }
 
     private View.OnClickListener click = new View.OnClickListener() {
@@ -154,31 +129,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 case R.id.BtnEstimate:
                     estimate_flag = !estimate_flag;
                     break;
-                    /*
-                case R.id.BtnCapture:
-                    MediaActionSound sound = new MediaActionSound();
-                    sound.play(MediaActionSound.SHUTTER_CLICK);
-                    Log.i(TAG, "on Button click");
-                    Date now = new Date();
-                    String currentDateAndTime = now.toString();
-                    String fileName = Environment.getExternalStorageDirectory().getPath()
-                             + "/sample_picture_" + currentDateAndTime + ".jpeg";
-                    camActivity.takePicture(fileName);
-                    break;
-                    */
                 default :
                     break;
             }
-
         }
     };
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        Bitmap bitmap = (Bitmap) data.getExtras().get("data");
-
-    }
 
     @Override
     protected void onPause() {
@@ -186,10 +141,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         if (javaCameraView != null) {
             javaCameraView.disableView();
         }
-        /*
-        mSensorManager.unregisterListener(mAccLis);
-        mSensorManager.unregisterListener(mGyroLis);
-        */
         mSensorManager.unregisterListener(userSensorListener);
     }
 
@@ -199,10 +150,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         if (javaCameraView != null) {
             javaCameraView.disableView();
         }
-        /*
-        mSensorManager.unregisterListener(mAccLis);
-        mSensorManager.unregisterListener(mGyroLis);
-        */
         mSensorManager.unregisterListener(userSensorListener);
     }
 
@@ -217,10 +164,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Log.i(TAG, "OpenCV not loaded");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_9, this, mLoaderCallBack);
         }
-        /*
-        mSensorManager.registerListener(mGyroLis, mGyroSensor, SensorManager.SENSOR_DELAY_UI);
-        mSensorManager.registerListener(mAccLis, mAccelometerSensor, SensorManager.SENSOR_DELAY_UI);
-        */
         mSensorManager.registerListener(userSensorListener, mGyroSensor, SensorManager.SENSOR_DELAY_GAME);
         mSensorManager.registerListener(userSensorListener, mAccelometerSensor, SensorManager.SENSOR_DELAY_GAME);
     }
@@ -241,34 +184,17 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        double reference = 0, dimA = 0, dimB = 0;
-        int object_counter = 0;
-        Point rollPoint = new Point();
-        Point pitchPoint = new Point();
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        //mSensorManager.registerListener(mGyroLis, mGyroSensor, SensorManager.SENSOR_DELAY_UI);
-        //mSensorManager.registerListener(mAccLis, mAccelometerSensor, SensorManager.SENSOR_DELAY_UI);
-
-        pitchPoint.x = 500;
-        pitchPoint.y = 40;
-
-        rollPoint.x = 500;
-        rollPoint.y = 80;
-
-        String accxStr = String.format("%.1f", mAccValues[0]);
-        String accyStr = String.format("%.1f", mAccValues[1]);
-        String acczStr = String.format("%.1f", mAccValues[2]);
-        //String angleXZStr = String.format("%.4f", angleXZ);
-        //String angleYZStr = String.format("%.4f", angleYZ);
-
-        String pitchStr = String.format("%.1f", pitch + 89.2);
-        String rollStr = String.format("%.1f", roll + 0.8);
-        //String yawStr = String.format("%.1f", yaw*RAD2DGR);
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
         img = inputFrame.rgba();
+
+        //return estimate_size(img, estimate_flag);
+        //return detect_poly(img);
+        return detect_rectangle(img, estimate_flag);
+    }
+
+    /** 물체 인식 & 길이 측정 */
+    public Mat estimate_size(Mat img, boolean estimate_flag) {
+        double reference = 0, dimA = 0, dimB = 0;
+
         Imgproc.cvtColor(img, img, Imgproc.COLOR_RGBA2BGR);
         Imgproc.cvtColor(img, imgHSV, Imgproc.COLOR_BGR2HSV);
         Imgproc.cvtColor(img, img, Imgproc.COLOR_BGR2RGBA);
@@ -296,7 +222,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.dilate(threshold, threshold, dilateElement);
         Imgproc.erode(threshold, threshold, erodeElement);
 
-
         List<MatOfPoint> cnts = new ArrayList<>();
         Imgproc.findContours(threshold, cnts, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
         //Imgproc.drawContours(img, cnts, -1, new Scalar(255,255,255));
@@ -304,6 +229,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Imgproc.fillPoly(threshold, Arrays.asList(c), new Scalar(255,255,255));
         //List<Point> box = new ArrayList<Point>();
 
+        /* 레퍼런스(동전) 꼭지점 좌표 저장 */
+        //Imgproc.drawContours(img, cnts, 0, new Scalar(255,255,255), 3);
+         
+
+        /** ESTIMATE 버튼 눌렀을 때 측정 시작 */
         if (estimate_flag) {
             for (int i = 0; i < cnts.size(); i++) {
                 if (Imgproc.contourArea(cnts.get(i)) > 200) {
@@ -316,10 +246,17 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     for (int j = 0; j < 4; j++) {
                         Imgproc.line(img, points[j], points[(j + 1) % 4], new Scalar(0, 255, 0), 8);
                         Imgproc.circle(img, new Point(points[j].x, points[j].y), 5, new Scalar(0, 0, 255), 8);
-                        Imgproc.circle(img, midPoint(points[j], points[(j + 1) % 4]), 5, new Scalar(255, 0, 0), 8);
+                        //Imgproc.circle(img, midPoint(points[j], points[(j + 1) % 4]), 5, new Scalar(255, 0, 0), 8);
+
+                        Imgproc.line(imgHSV, points[j], points[(j + 1) % 4], new Scalar(0, 255, 0), 8);
+                        Imgproc.circle(imgHSV, new Point(points[j].x, points[j].y), 5, new Scalar(0, 0, 255), 8);
+                        //Imgproc.circle(imgHSV, midPoint(points[j], points[(j + 1) % 4]), 5, new Scalar(255, 0, 0), 8);
                     }
-                    for (int j = 0; j < 2; j++)
-                        Imgproc.line(img, midPoint(points[j % 4], points[(j + 1) % 4]), midPoint(points[(j + 2) % 4], points[(j + 3) % 4]), new Scalar(255, 0, 255), 8);
+                    for (int j = 0; j < 2; j++) {
+                        //Imgproc.line(img, midPoint(points[j % 4], points[(j + 1) % 4]), midPoint(points[(j + 2) % 4], points[(j + 3) % 4]), new Scalar(255, 0, 255), 8);
+
+                        //Imgproc.line(imgHSV, midPoint(points[j % 4], points[(j + 1) % 4]), midPoint(points[(j + 2) % 4], points[(j + 3) % 4]), new Scalar(255, 0, 255), 8);
+                    }
 
                     double dA = euclidean(midPoint(points[0], points[1]), midPoint(points[2], points[3]));
                     double dB = euclidean(midPoint(points[0], points[3]), midPoint(points[1], points[2]));
@@ -328,18 +265,96 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         reference = dB / 2.4;
 
                     dimA = dA / reference;
-                    dimB = dB / reference;
+                    dimB = dB / reference;  //new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y)
 
-                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[0], points[1]).x, midPoint(points[0], points[0]).y - 180), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+
+                    Imgproc.putText(imgHSV, Double.parseDouble(String.format("%.1f", dimA)) + "cm", new Point(midPoint(points[0], points[1]).x - 15, midPoint(points[0], points[0]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    Imgproc.putText(imgHSV, Double.parseDouble(String.format("%.1f", dimB)) + "cm", new Point(midPoint(points[1], points[2]).x - 15, midPoint(points[1], points[2]).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+
                 }
             }
         }
-        Imgproc.putText(img, "Front/Back : " + pitchStr + "`", pitchPoint, Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
-        Imgproc.putText(img, "Right/Left : " + rollStr + "`", rollPoint, Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
+        display_angle(img);
 
         return img;
-        //return threshold;
+    }
+
+    public Mat detect_rectangle(Mat img, boolean estimate_flag) {
+        Imgproc cv = new Imgproc();
+        double reference = 0, dim1 = 0, dim2 = 0, dim3 = 0, dim4 = 0;
+
+        if (estimate_flag) {
+            /* 에지 이미지로 변환 */
+            cv.cvtColor(img, img, cv.COLOR_RGBA2BGR);
+            cv.cvtColor(img, imgGray, cv.COLOR_BGR2GRAY);
+            cv.cvtColor(img, img, cv.COLOR_BGR2RGB);
+            cv.GaussianBlur(imgGray, imgCanny, new Size(3, 3), 0);
+            cv.Canny(imgCanny, imgCanny, 75, 200);
+
+            /* 에지 이미지를 morphologyEx 함수로 형태를 뭉갬 */
+            Mat kernel = Imgproc.getStructuringElement(cv.MORPH_ELLIPSE, new Size(11, 11));
+            Mat morph = new Mat();
+            cv.morphologyEx(imgCanny, morph, cv.MORPH_CLOSE, kernel);
+
+            /* contours 함수를 이용해 Morph 이미지의 도형들을 그룹화, 그림 */
+            int idx, i = 0;
+            List<MatOfPoint> cnts = new ArrayList<>();
+            cv.findContours(morph, cnts, new Mat(), cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
+
+            Mat imgCnts = new Mat();
+            cv.cvtColor(imgCanny, imgCnts, cv.COLOR_GRAY2BGR);
+            for (idx = 0; idx < cnts.size(); idx++) {
+                MatOfPoint maxMatOfPoint = cnts.get(i);
+                MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                RotatedRect rect = cv.minAreaRect(maxMatOfPoint2f);
+                double areaRatio = Math.abs(cv.contourArea(cnts.get(i))) / (rect.size.width * rect.size.height);
+                cv.drawContours(imgCnts, cnts, idx, new Scalar(255, 0, 0), 2);
+            }
+
+            MatOfPoint2f poly2f = new MatOfPoint2f();
+            Mat imgRect = new Mat();
+            List<Point> poly_point = new ArrayList<>();
+            cv.cvtColor(imgCanny, imgRect, cv.COLOR_GRAY2BGR);
+
+            for (idx = 0; idx < cnts.size(); idx++) {
+                if (cv.contourArea(cnts.get(idx)) > 200) {
+                    MatOfPoint maxMatOfPoint = cnts.get(idx);
+                    MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                    double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
+                    double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
+                    cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon1, true);
+
+                    poly_point = poly2f.toList();
+                    for (i = 0; i < poly_point.size(); i++) {
+                        if (poly_point.size() == 4) {
+                            String pointStr = "(" + String.format("%.0f", poly_point.get(i).x) + ", " + String.format("%.0f", poly_point.get(i).y) + ")";
+                            cv.line(img, poly_point.get(i), poly_point.get((i + 1) % poly_point.size()), new Scalar(0, 0, 255), 5);
+                            cv.circle(img, new Point(poly_point.get(i).x, poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
+                            // 꼭지점 좌표 표시
+                            //cv.putText(img, pointStr, poly_point.get(i), cv.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                        }
+                    }
+                    if (poly_point.size() == 4) {
+                        double d1 = euclidean(poly_point.get(0), poly_point.get(1));
+                        double d2 = euclidean(poly_point.get(1), poly_point.get(2));
+
+                        if (idx == 0 || reference == 0)
+                            reference = d1 / 2.4;
+
+                        dim1 = d1 / reference;
+                        dim2 = d2 / reference;
+
+                        Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim1)) + "cm", midPoint(poly_point.get(0), poly_point.get(1)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                        Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim2)) + "cm", midPoint(poly_point.get(1), poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    }
+                }
+            }
+        }
+        display_angle(img);
+
+        return img;
     }
 
     public Point midPoint(Point a, Point b) {
@@ -356,7 +371,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    //여기서부턴 퍼미션 관련 메소드
+    /** 퍼미션 관련 메소드 */
+
     static final int PERMISSIONS_REQUEST_CODE = 1000;
     String[] PERMISSIONS  = {"android.permission.CAMERA"};
 
@@ -366,11 +382,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         for (String perms : permissions){
             result = ContextCompat.checkSelfPermission(this, perms);
             if (result == PackageManager.PERMISSION_DENIED){
-                //허가 안된 퍼미션 발견
+                // 허가 안된 퍼미션 발견
                 return false;
             }
         }
-        //모든 퍼미션이 허가되었음
+        // 모든 퍼미션 허가됨
         return true;
     }
 
@@ -411,79 +427,17 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         builder.create().show();
     }
 
-    // 퍼미션 관련 메소드 끝
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-    /*
-    private class AccelometerListener implements SensorEventListener {
-        @Override
-        public void onSensorChanged(SensorEvent event) {  // 센서값 바뀔때마다 호출됨
-                accX = event.values[0];
-                accY = event.values[1];
-                accZ = event.values[2];
 
-                angleXZ = Math.atan2(accX, accZ) * 180 / Math.PI;
-                angleYZ = Math.atan2(accY, accZ) * 180 / Math.PI;
+    /** 자이로 / 가속도 센서 */
 
-                Log.e("LOG", "ACCELOMETER           [X]:" + String.format("%.4f", event.values[0])
-                        + "           [Y]:" + String.format("%.4f", event.values[1])
-                        + "           [Z]:" + String.format("%.4f", event.values[2])
-                        + "           [angleXZ]: " + String.format("%.4f", angleXZ)
-                        + "           [angleYZ]: " + String.format("%.4f", angleYZ));
-
-        }
-
-        @Override
-        public void onAccuracyChanged(Sensor sensor, int accuracy) { }
-    }
-
-    private class GyroscopeListener implements SensorEventListener {
-        @Override
-        public void onSensorChanged(SensorEvent event) {
-                // 각 축의 각속도 성분을 받는다.
-                double gyroX = event.values[0];
-                double gyroY = event.values[1];
-                double gyroZ = event.values[2];
-
-                // 각속도를 적분하여 회전각을 추출하기 위해 적분 간격(dt)을 구한다.
-                // dt : 센서가 현재 상태를 감지하는 시간 간격
-                // NS2S : nano second -> second
-                dt = (event.timestamp - timestamp) * NS2S;
-                timestamp = event.timestamp;
-
-                // 맨 센서 인식을 활성화 하여 처음 timestamp가 0일때는 dt값이 올바르지 않으므로 넘어간다.
-                if (dt - timestamp * NS2S != 0) {
-
-                    // 각속도 성분을 적분 -> 회전각(pitch, roll)으로 변환.
-                    // 여기까지의 pitch, roll의 단위는 '라디안'이다.
-                    // SO 아래 로그 출력부분에서 멤버변수 'RAD2DGR'를 곱해주어 degree로 변환해줌.
-                    pitch = pitch + gyroY * dt;
-                    roll = roll + gyroX * dt;
-                    yaw = yaw + gyroZ * dt;
-
-                    Log.e("LOG", "GYROSCOPE           [X]:" + String.format("%.4f", event.values[0])
-                            + "           [Y]:" + String.format("%.4f", event.values[1])
-                            + "           [Z]:" + String.format("%.4f", event.values[2])
-                            + "           [Pitch]: " + String.format("%.1f", pitch * RAD2DGR)
-                            + "           [Roll]: " + String.format("%.1f", roll * RAD2DGR)
-                            + "           [Yaw]: " + String.format("%.1f", yaw * RAD2DGR)
-                            + "           [dt]: " + String.format("%.4f", dt));
-
-            }
-        }
-
-        @Override
-        public void onAccuracyChanged(Sensor sensor, int accuracy) { }
-    }
-    */
-
-    // 1차 상보필터 적용
+    /** 1차 상보필터 적용 */
     private void complementaty(double new_ts){
-        /* 자이로랑 가속 해제 */
+        /** 자이로랑 가속 해제 */
         gyroRunning = false;
         accRunning = false;
 
-        /*센서 값 첫 출력시 dt(=timestamp - event.timestamp)에 오차가 생기므로 처음엔 break */
+        /** 센서 값 첫 출력시 dt(=timestamp - event.timestamp)에 오차가 생기므로 처음엔 break */
         if(timestamp == 0){
             timestamp = new_ts;
             return;
@@ -491,7 +445,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         dt = (new_ts - timestamp) * NS2S; // ns->s 변환
         timestamp = new_ts;
 
-        /* degree measure for accelerometer */
+        /** 가속도 센서를 읽어서 각도 계산 */
         mAccPitch = -Math.atan2(mAccValues[0], mAccValues[2]) * 180.0 / Math.PI; // Y 축 기준
         mAccRoll= Math.atan2(mAccValues[1], mAccValues[2]) * 180.0 / Math.PI; // X 축 기준
 
@@ -513,7 +467,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             switch (event.sensor.getType()){
                 /** GYROSCOPE */
                 case Sensor.TYPE_GYROSCOPE:
-                    /*센서 값을 mGyroValues에 저장*/
+                    /** 센서 값을 mGyroValues에 저장 */
                     mGyroValues = event.values;
                     if(!gyroRunning)
                         gyroRunning = true;
@@ -521,14 +475,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
                 /** ACCELEROMETER */
                 case Sensor.TYPE_ACCELEROMETER:
-                    /*센서 값을 mAccValues에 저장*/
+                    /** 센서 값을 mAccValues에 저장 */
                     mAccValues = event.values;
                     if(!accRunning)
                         accRunning = true;
                     break;
             }
 
-            /**두 센서 새로운 값을 받으면 상보필터 적용*/
+            /** 두 센서 새로운 값을 받으면 상보필터 적용 */
             if(gyroRunning && accRunning){
                 complementaty(event.timestamp);
             }
@@ -536,5 +490,24 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         @Override
         public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+    }
+
+    public void display_angle(Mat img) {
+        /* 화면에 기울기 표시되는 위치 좌표 */
+
+        Point rollPoint = new Point();
+        Point pitchPoint = new Point();
+
+        pitchPoint.x = 500;
+        pitchPoint.y = 40;
+
+        rollPoint.x = 500;
+        rollPoint.y = 80;
+
+        String pitchStr = String.format("%.1f", pitch + 89.2);
+        String rollStr = String.format("%.1f", roll + 0.8);
+
+        Imgproc.putText(img, "Front/Back : " + pitchStr + "`", pitchPoint, Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
+        Imgproc.putText(img, "Right/Left : " + rollStr + "`", rollPoint, Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,255,255), 3);
     }
 }
