@@ -46,9 +46,13 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private static String TAG = "MainActivity";
     JavaCameraView javaCameraView;
     Button EstimateButton;
-    Mat img, imgGray, imgCanny, imgHSV, threshold;
+    Mat img, imgGray, imgCanny, imgCnts, imgHSV, threshold;
     boolean estimate_flag = false;
     Point refPoint[] = new Point[4];
+
+    List<Point> ref_point = new ArrayList<>();
+    List<Point> warped_ref_point = new ArrayList<>();
+    List<Point> warped_point;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -173,6 +177,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         img = new Mat(height, width, CvType.CV_8UC4);
         imgGray = new Mat(height, width, CvType.CV_8UC1);
         imgCanny = new Mat(height, width, CvType.CV_8UC1);
+        imgCnts = new Mat(height, width, CvType.CV_8UC4);
         imgHSV = new Mat(height, width, CvType.CV_8UC4);
         threshold = new Mat(height, width, CvType.CV_8SC4);
     }
@@ -188,10 +193,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         //return estimate_size(img, estimate_flag);
         //return detect_poly(img);
-        return detect_rectangle(img, estimate_flag);
+        //return detect_rectangle(img, estimate_flag);
+        return img_segmentation(img, estimate_flag);
     }
 
-    /** 물체 인식 & 길이 측정 */
+    /* 물체 인식 & 길이 측정 */
     public Mat estimate_size(Mat img, boolean estimate_flag) {
         double reference = 0, dimA = 0, dimB = 0;
 
@@ -233,7 +239,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //Imgproc.drawContours(img, cnts, 0, new Scalar(255,255,255), 3);
          
 
-        /** ESTIMATE 버튼 눌렀을 때 측정 시작 */
+        /* ESTIMATE 버튼 눌렀을 때 측정 시작 */
         if (estimate_flag) {
             for (int i = 0; i < cnts.size(); i++) {
                 if (Imgproc.contourArea(cnts.get(i)) > 200) {
@@ -283,7 +289,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     public Mat detect_rectangle(Mat img, boolean estimate_flag) {
         Imgproc cv = new Imgproc();
-        double reference = 0, dim1 = 0, dim2 = 0, dim3 = 0, dim4 = 0;
+        /*
+        List<Point> ref_point = new ArrayList<>();
+        List<Point> warped_ref_point = new ArrayList<>();
+        List<Point> warped_point;
+        */
+        double reference = 0, dim1 = 0, dim2 = 0, ref_length1 = 0, ref_length2 = 0;
 
         if (estimate_flag) {
             /* 에지 이미지로 변환 */
@@ -291,35 +302,42 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             cv.cvtColor(img, imgGray, cv.COLOR_BGR2GRAY);
             cv.cvtColor(img, img, cv.COLOR_BGR2RGB);
             cv.GaussianBlur(imgGray, imgCanny, new Size(3, 3), 0);
-            cv.Canny(imgCanny, imgCanny, 75, 200);
+            cv.Canny(imgCanny, imgCanny, 20, 200);
 
             /* 에지 이미지를 morphologyEx 함수로 형태를 뭉갬 */
-            Mat kernel = Imgproc.getStructuringElement(cv.MORPH_ELLIPSE, new Size(11, 11));
+            //Mat kernel = Imgproc.getStructuringElement(cv.MORPH_ELLIPSE, new Size(11, 11));
+            Mat kernel = Imgproc.getStructuringElement(cv.MORPH_ELLIPSE, new Size(5,5 ));
             Mat morph = new Mat();
             cv.morphologyEx(imgCanny, morph, cv.MORPH_CLOSE, kernel);
 
             /* contours 함수를 이용해 Morph 이미지의 도형들을 그룹화, 그림 */
-            int idx, i = 0;
+            int idx, i = 0, obj_num = 0;
             List<MatOfPoint> cnts = new ArrayList<>();
             cv.findContours(morph, cnts, new Mat(), cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
 
+            /*
             Mat imgCnts = new Mat();
             cv.cvtColor(imgCanny, imgCnts, cv.COLOR_GRAY2BGR);
+
             for (idx = 0; idx < cnts.size(); idx++) {
                 MatOfPoint maxMatOfPoint = cnts.get(i);
                 MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
                 RotatedRect rect = cv.minAreaRect(maxMatOfPoint2f);
-                double areaRatio = Math.abs(cv.contourArea(cnts.get(i))) / (rect.size.width * rect.size.height);
-                cv.drawContours(imgCnts, cnts, idx, new Scalar(255, 0, 0), 2);
+                //double areaRatio = Math.abs(cv.contourArea(cnts.get(i))) / (rect.size.width * rect.size.height);
+                //cv.drawContours(imgCnts, cnts, idx, new Scalar(255, 0, 0), 2);
             }
+            */
 
+            /* contours 이미지를 approxPolyDP를 이용해 선분 간략화 */
             MatOfPoint2f poly2f = new MatOfPoint2f();
-            Mat imgRect = new Mat();
+            //Mat imgRect = new Mat();
             List<Point> poly_point = new ArrayList<>();
-            cv.cvtColor(imgCanny, imgRect, cv.COLOR_GRAY2BGR);
+            //cv.cvtColor(imgCanny, imgRect, cv.COLOR_GRAY2BGR);
 
             for (idx = 0; idx < cnts.size(); idx++) {
-                if (cv.contourArea(cnts.get(idx)) > 200) {
+                if (cv.contourArea(cnts.get(idx)) > 100) {
+                    if (obj_num >= 5)
+                        break;
                     MatOfPoint maxMatOfPoint = cnts.get(idx);
                     MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
                     double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
@@ -329,32 +347,223 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     poly_point = poly2f.toList();
                     for (i = 0; i < poly_point.size(); i++) {
                         if (poly_point.size() == 4) {
-                            String pointStr = "(" + String.format("%.0f", poly_point.get(i).x) + ", " + String.format("%.0f", poly_point.get(i).y) + ")";
                             cv.line(img, poly_point.get(i), poly_point.get((i + 1) % poly_point.size()), new Scalar(0, 0, 255), 5);
                             cv.circle(img, new Point(poly_point.get(i).x, poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
                             // 꼭지점 좌표 표시
                             //cv.putText(img, pointStr, poly_point.get(i), cv.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                         }
                     }
+                    // 사각형인 물체만 인식
                     if (poly_point.size() == 4) {
-                        double d1 = euclidean(poly_point.get(0), poly_point.get(1));
-                        double d2 = euclidean(poly_point.get(1), poly_point.get(2));
+                        double d1 = 0, d2 = 0;
 
-                        if (idx == 0 || reference == 0)
+                        //동전 크기의 정사각형을 레퍼런스로 설정
+                        if (idx == 0 || reference == 0) {
+                            d1 = euclidean(poly_point.get(0), poly_point.get(1));
                             reference = d1 / 2.4;
+                            dim1 = d1 / reference;
+                            dim2 = dim1;
 
-                        dim1 = d1 / reference;
-                        dim2 = d2 / reference;
+
+                            for (int j=0; j<4; j++)
+                                ref_point.add(new Point(poly_point.get(j).x, poly_point.get(j).y));
+
+                            ref_length1 = euclidean(ref_point.get(0), ref_point.get(1));
+                            ref_length2 = euclidean(ref_point.get(1), ref_point.get(2));
+
+                            // 레퍼런스를 240*240 크기로 와핑
+                            warped_ref_point.add(new Point(0, 0));
+                            warped_ref_point.add(new Point(0, 240));
+                            warped_ref_point.add(new Point(240, 0));
+
+                        }
+                        // 레퍼런스가 아닌 물체 길이 측정
+                        else {
+                            warped_point = new ArrayList<Point>();
+                            d1 = euclidean(poly_point.get(0), poly_point.get(1));
+                            d2 = euclidean(poly_point.get(1), poly_point.get(2));
+
+                            // 인식한 물제를 레퍼런스와의 비율에 맞게 와핑
+                            warped_point.add(new Point(0, 0));
+                            warped_point.add(new Point(240 * (d1 / ref_length1), 0));
+                            warped_point.add(new Point(0, 240 * (d2 / ref_length2)));
+
+                            dim1 = d1 / reference;
+                            dim2 = d2 / reference;
+                            //dim1 = euclidean(warped_point.get(0), warped_point.get(1)) / 100;
+                            //dim2 = euclidean(warped_point.get(1), warped_point.get(2)) / 100;
+                        }
 
                         Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim1)) + "cm", midPoint(poly_point.get(0), poly_point.get(1)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                         Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim2)) + "cm", midPoint(poly_point.get(1), poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+
                     }
+                    //obj_num++;
                 }
             }
+
         }
         display_angle(img);
 
         return img;
+    }
+
+    public Mat img_segmentation(Mat img, boolean estimate_flag) {
+        Imgproc cv = new Imgproc();
+        List<Point> ref_point = new ArrayList<>();
+        List<Point> warped_ref_point = new ArrayList<>();
+        List<Point> warped_point;
+        double reference = 0, dim1 = 0, dim2 = 0, ref_length1 = 0, ref_length2 = 0;
+
+        Mat img_gray_blur = new Mat();
+        Mat morph = new Mat();
+
+        if (true) {
+            /* 에지 이미지로 변환 */
+            cv.cvtColor(img, img, cv.COLOR_RGBA2BGR);
+            cv.cvtColor(img, imgGray, cv.COLOR_BGR2GRAY);
+            cv.cvtColor(img, img, cv.COLOR_BGR2RGB);
+////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 인식 성능 향상을 위해 추가된 부분
+
+            cv.GaussianBlur(imgGray, img_gray_blur, new Size(15,15), 0);
+            cv.adaptiveThreshold(img_gray_blur, threshold, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 1);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+            //cv.Canny(imgCanny, imgCanny, 20, 200);
+
+            // 에지 이미지를 morphologyEx 함수로 형태를 뭉갬
+            //Mat kernel = Imgproc.getStructuringElement(cv.MORPH_ELLIPSE, new Size(11, 11));
+            Mat kernel = Imgproc.getStructuringElement(cv.MORPH_ELLIPSE, new Size(7,7));
+            cv.morphologyEx(threshold, morph, cv.MORPH_OPEN, kernel);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 인식 성능 향상을 위해 추가된 부분
+
+
+            int idx, i = 0, obj_num = 0;
+            List<MatOfPoint> cnts = new ArrayList<>();
+            cv.findContours(morph, cnts, new Mat(), cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
+
+            MatOfPoint2f poly2f = new MatOfPoint2f();
+            List<Point> poly_point = new ArrayList<>();
+
+            for (idx = 0; idx < cnts.size(); idx++) {
+                if (cv.contourArea(cnts.get(idx)) > 100) {
+                    if (obj_num >= 5)
+                        break;
+                    MatOfPoint maxMatOfPoint = cnts.get(idx);
+                    MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                    double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
+                    double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
+                    cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon1, true);
+
+                    poly_point = poly2f.toList();
+                    for (i = 0; i < poly_point.size(); i++) {
+                        if (poly_point.size() == 4) {
+                            cv.line(img, poly_point.get(i), poly_point.get((i + 1) % poly_point.size()), new Scalar(0, 0, 255), 5);
+                            cv.circle(img, new Point(poly_point.get(i).x, poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
+                            // 꼭지점 좌표 표시
+                            //cv.putText(img, pointStr, poly_point.get(i), cv.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                        }
+                    }
+                    // 사각형인 물체만 인식
+                    if (poly_point.size() == 4) {
+                        double d1 = 0, d2 = 0;
+
+                        //동전 크기의 정사각형을 레퍼런스로 설정
+                        if (idx == 0 || reference == 0) {
+                            d1 = euclidean(poly_point.get(0), poly_point.get(1));
+                            reference = d1 / 2.4;
+                            dim1 = d1 / reference;
+                            dim2 = dim1;
+
+
+                            for (int j=0; j<4; j++)
+                                ref_point.add(new Point(poly_point.get(j).x, poly_point.get(j).y));
+
+                            ref_length1 = euclidean(ref_point.get(0), ref_point.get(1));
+                            ref_length2 = euclidean(ref_point.get(1), ref_point.get(2));
+
+                            // 레퍼런스를 240*240 크기로 와핑
+                            warped_ref_point.add(new Point(0, 0));
+                            warped_ref_point.add(new Point(0, 240));
+                            warped_ref_point.add(new Point(240, 0));
+
+                        }
+                        // 레퍼런스가 아닌 물체 길이 측정
+                        else {
+                            warped_point = new ArrayList<Point>();
+                            d1 = euclidean(poly_point.get(0), poly_point.get(1));
+                            d2 = euclidean(poly_point.get(1), poly_point.get(2));
+
+                            // 인식한 물제를 레퍼런스와의 비율에 맞게 와핑
+                            warped_point.add(new Point(0, 0));
+                            warped_point.add(new Point(240 * (d1 / ref_length1), 0));
+                            warped_point.add(new Point(0, 240 * (d2 / ref_length2)));
+
+                            //dim1 = d1 / reference;
+                            //dim2 = d2 / reference;
+                            dim1 = euclidean(warped_point.get(0), warped_point.get(1)) / 100;
+                            dim2 = euclidean(warped_point.get(1), warped_point.get(2)) / 100;
+                        }
+
+                        Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim1)) + "cm", midPoint(poly_point.get(0), poly_point.get(1)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                        Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim2)) + "cm", midPoint(poly_point.get(1), poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    }
+                    //obj_num++;
+                }
+            }
+
+        }
+        display_angle(img);
+
+        return img;
+    }
+
+    public void calculate_size(Mat img, int idx, double reference, List<Point> poly_point) {
+        double d1 = 0, d2 = 0, dim1 = 0, dim2 = 0, ref_length1 = 0, ref_length2 = 0;
+
+        //동전 크기의 정사각형을 레퍼런스로 설정
+        if (idx == 0 || reference == 0) {
+            d1 = euclidean(poly_point.get(0), poly_point.get(1));
+            reference = d1 / 2.4;
+            dim1 = d1 / reference;
+            dim2 = dim1;
+
+
+            for (int j=0; j<4; j++)
+                ref_point.add(new Point(poly_point.get(j).x, poly_point.get(j).y));
+
+            ref_length1 = euclidean(ref_point.get(0), ref_point.get(1));
+            ref_length2 = euclidean(ref_point.get(1), ref_point.get(2));
+
+            // 레퍼런스를 240*240 크기로 와핑
+            warped_ref_point.add(new Point(0, 0));
+            warped_ref_point.add(new Point(0, 240));
+            warped_ref_point.add(new Point(240, 0));
+
+        }
+        // 레퍼런스가 아닌 물체 길이 측정
+        else {
+            warped_point = new ArrayList<Point>();
+            d1 = euclidean(poly_point.get(0), poly_point.get(1));
+            d2 = euclidean(poly_point.get(1), poly_point.get(2));
+
+            // 인식한 물제를 레퍼런스와의 비율에 맞게 와핑
+            warped_point.add(new Point(0, 0));
+            warped_point.add(new Point(240 * (d1 / ref_length1), 0));
+            warped_point.add(new Point(0, 240 * (d2 / ref_length2)));
+
+            //dim1 = d1 / reference;
+            //dim2 = d2 / reference;
+            dim1 = euclidean(warped_point.get(0), warped_point.get(1)) / 100;
+            dim2 = euclidean(warped_point.get(1), warped_point.get(2)) / 100;
+        }
+
+        Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim1)) + "cm", midPoint(poly_point.get(0), poly_point.get(1)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+        Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim2)) + "cm", midPoint(poly_point.get(1), poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+
     }
 
     public Point midPoint(Point a, Point b) {
