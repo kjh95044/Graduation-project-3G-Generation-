@@ -9,13 +9,27 @@ public class WatershedSegment {
 
         public void setMarkers(Mat markerImage)
         {
-            markerImage.convertTo(markers, CvType.CV_8U);
+            markerImage.convertTo(markers, CvType.CV_32S);
         }
 
         public Mat process(Mat image)
         {
             Imgproc.watershed(image, markers);
-            markers.convertTo(markers, CvType.CV_8U);
-            return markers;
+            return this.markers;
+        }
+
+
+        public Mat getSegmentation() {
+            Mat temp = new Mat();
+            markers.convertTo(temp, CvType.CV_8U);
+
+            return temp;
+        }
+
+        public Mat getWatershed() {
+            Mat temp = new Mat();
+            markers.convertTo(temp, CvType.CV_8U, 255, 255);
+
+            return temp;
         }
 }
