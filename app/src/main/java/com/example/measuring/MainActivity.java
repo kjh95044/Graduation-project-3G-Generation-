@@ -46,7 +46,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private static String TAG = "MainActivity";
     JavaCameraView javaCameraView;
     Button EstimateButton;
-    Mat img, imgGray, imgCanny, imgCnts, imgHSV, threshold, imgBinary;
+    Mat img, imgGray, imgCanny, imgCnts, imgHSV, threshold, imgBinary, imgWarped;
     boolean estimate_flag = false;
     Point refPoint[] = new Point[4];
 
@@ -181,6 +181,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         imgHSV = new Mat(height, width, CvType.CV_8UC4);
         imgBinary = new Mat(height, width, CvType.CV_8UC4);
         threshold = new Mat(height, width, CvType.CV_8SC4);
+        imgWarped = new Mat(height, width, CvType.CV_8UC4);
     }
 
     @Override
@@ -611,6 +612,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Mat fg = new Mat();
         Mat bg = new Mat();
         Mat result = new Mat();
+        Point[] srcPtn = new Point[3];
+        Point[] dstPtn = new Point[3];
         int idx, i;
 
         List<Point> ref_point = new ArrayList<>();
@@ -622,9 +625,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         cv.cvtColor(img, img, cv.COLOR_RGBA2RGB);
         cv.threshold(imgGray, imgBinary, 109, 255, cv.THRESH_BINARY_INV);
 
-        cv.erode(imgBinary, fg, new Mat(), new Point(-1,-1), 7);
+        cv.erode(imgBinary, fg, new Mat(), new Point(-1,-1), 9);
 
-        cv.dilate(imgBinary, bg, new Mat(), new Point(-1,-1), 7);
+        cv.dilate(imgBinary, bg, new Mat(), new Point(-1,-1), 20);
         cv.threshold(bg, bg, 1, 120, cv.THRESH_BINARY_INV);
 
         Mat markers = new Mat(imgBinary.size(), CvType.CV_8U, new Scalar(0));
@@ -633,13 +636,15 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         WatershedSegment segmenter = new WatershedSegment();
         segmenter.setMarkers(markers);
 
-        result = segmenter.process(img);
-        Core.subtract(result, bg, result);
+        segmenter.process(img);
+        result = segmenter.getSegmentation();
+        //Core.subtract(result, bg, result);
 
         Mat markers2 = new Mat();
         List<MatOfPoint> cnts = new ArrayList<>();
         cv.threshold(result, markers2, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-        cv.findContours(markers2, cnts, new Mat(), cv.RETR_LIST, cv.CHAIN_APPROX_NONE, new Point(0,0));
+        cv.findContours(markers2, cnts, new Mat(), cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE, new Point(0,0));
+        cv.drawContours(markers2, cnts, -1, new Scalar(255,255,255), cv.FILLED);
 
         /*
         for (i = 0; i < cnts.size(); i++) {
@@ -647,7 +652,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
             RotatedRect rect = cv.minAreaRect(maxMatOfPoint2f);
             //double areaRatio = Math.abs(cv.contourArea(cnts.get(i))) / (rect.size.width * rect.size.height);
-            cv.drawContours(img, cnts, i, new Scalar(255, 0, 0), cv.FILLED);
+            cv.drawContours(markers2, cnts, i, new Scalar(0,0,0), cv.FILLED);
         }
         */
 
@@ -674,7 +679,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     }
                 }
 
-                /*
+
                 // 사각형인 물체만 인식
                 if (poly_point.size() == 4) {
                     double d1 = 0, d2 = 0, d3 = 0, d4 = 0;
@@ -713,21 +718,28 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         warped_ref_point.add(new Point(0, 240));
                         warped_ref_point.add(new Point(240, 0));
 
+                        srcPtn[0] = ref_point.get(0);
+                        srcPtn[1] = ref_point.get(1);
+                        srcPtn[2] = ref_point.get(2);
+
+                        dstPtn[0] = new Point(200,50);
+                        dstPtn[1] = new Point(200,150);
+                        dstPtn[2] = new Point(100,150);
+
+                        Mat warpMat = cv.getAffineTransform(new MatOfPoint2f(srcPtn), new MatOfPoint2f(dstPtn));
+
+                        imgWarped = Mat.zeros(img.rows(), img.cols(), img.type());
+
+                        cv.warpAffine(img, imgWarped, warpMat, imgWarped.size());
                     }
                     // 레퍼런스가 아닌 물체 길이 측정
                     else {
                         warped_point = new ArrayList<Point>();
 
+
                         // 화면 상의 물체의 길이 (fake obj)
                         d2 = euclidean(poly_point.get(0), poly_point.get(1));
                         d1 = euclidean(poly_point.get(1), poly_point.get(2));
-                        //d3 = euclidean(poly_point.get(2), poly_point.get(3));
-                        //d4 = euclidean(poly_point.get(3), poly_point.get(0));
-
-                        //
-                        d1 = d1 / reference;
-                        d2 = d1 / reference;
-
 
                         // 인식한 물제를 레퍼런스와의 비율에 맞게 와핑
                         warped_point.add(new Point(0, 0));
@@ -737,23 +749,15 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         // 실제 물체의 길이 (real obj)
                         dim1 = 2.4 * (d1 / ref_length1);
                         dim2 = 2.4 * (d2 / ref_length2);
-                        //dim3 = 2.4 * (d3 / ref_length3);
-                        //dim4 = 2.4 * (d4 / ref_length4);
-
-                        //
-                        dim1 = d1 / reference;
-                        dim2 = d2 / reference;
-
-
                     }
 
-                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim2)) + "cm", midPoint(poly_point.get(0), poly_point.get(1)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                    Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim1)) + "cm", midPoint(poly_point.get(1), poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    Imgproc.putText(imgWarped, Double.parseDouble(String.format("%.1f", dim2)) + "cm", midPoint(poly_point.get(0), poly_point.get(1)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                    Imgproc.putText(imgWarped, Double.parseDouble(String.format("%.1f", dim1)) + "cm", midPoint(poly_point.get(1), poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                     //Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim3)) + "cm", midPoint(poly_point.get(2), poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                     //Imgproc.putText(img, Double.parseDouble(String.format("%.1f", dim4)) + "cm", midPoint(poly_point.get(3), poly_point.get(0)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
 
                 }
-                */
+
                 //obj_num++;
             }
 
@@ -762,6 +766,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
 
         return img;
+    }
+
+    public Mat warp_image(Mat img) {
+        Mat warped = new Mat();
+
+
+
+        return warped;
     }
 
     public List<MatOfPoint> sortContours(List<MatOfPoint> cnts) {

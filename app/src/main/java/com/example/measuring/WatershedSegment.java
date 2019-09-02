@@ -6,30 +6,32 @@ import org.opencv.imgproc.Imgproc;
 
 public class WatershedSegment {
         public Mat markers = new Mat();
+        public Mat segmentation = new Mat();
+        public Mat watershed = new Mat();
 
         public void setMarkers(Mat markerImage)
         {
             markerImage.convertTo(markers, CvType.CV_32S);
         }
 
-        public Mat process(Mat image)
+        public void process(Mat image)
         {
             Imgproc.watershed(image, markers);
+            markers.convertTo(markers, CvType.CV_8U);
+        }
+
+        public Mat getMarkers() {
             return this.markers;
         }
 
 
         public Mat getSegmentation() {
-            Mat temp = new Mat();
-            markers.convertTo(temp, CvType.CV_8U);
-
-            return temp;
+            markers.convertTo(segmentation, CvType.CV_8U);
+            return this.segmentation;
         }
 
         public Mat getWatershed() {
-            Mat temp = new Mat();
-            markers.convertTo(temp, CvType.CV_8U, 255, 255);
-
-            return temp;
+            markers.convertTo(watershed, CvType.CV_8U, 150, 150);
+            return this.watershed;
         }
 }
