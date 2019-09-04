@@ -812,7 +812,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
                 double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
                 double epsilon3 = 0.05 * cv.arcLength(maxMatOfPoint2f, true);
-                cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon1, true);
+                cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon2, true);
 
                 poly_point = poly2f.toList();
                 for (i = 0; i < poly_point.size(); i++) {
