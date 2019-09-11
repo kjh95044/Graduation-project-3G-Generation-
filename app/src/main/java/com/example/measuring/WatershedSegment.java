@@ -31,7 +31,7 @@ public class WatershedSegment {
         }
 
         public Mat getWatershed() {
-            markers.convertTo(watershed, CvType.CV_8U, 150, 150);
+            markers.convertTo(watershed, CvType.CV_8U, 100, 100);
             return this.watershed;
         }
 }
