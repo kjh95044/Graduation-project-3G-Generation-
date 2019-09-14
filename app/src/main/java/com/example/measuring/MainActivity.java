@@ -61,9 +61,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     List<Point> warped_ref_point = new ArrayList<>();
     List<Point> warped_point;
 
-    public static int NORMAL = 0;
-    public static int ESTIMATE = 1;
-    public static int ESTIMATE_WARP = 2;
+    public static final int NORMAL = 0;
+    public static final int ESTIMATE = 1;
+    public static final int ESTIMATE_WARP = 2;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -885,213 +885,163 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     public Mat watershed_rotate(Mat img, int estimate_flag1) {
         Imgproc cv = new Imgproc();
-        Mat fg = new Mat();
-        Mat bg = new Mat();
         Mat result = new Mat();
+        Mat trans = new Mat(3, 3, CvType.CV_64FC1);
+        Mat img_inverse = new Mat();
         int idx, i;
+        double len_out1 = 0, len_out2 = 0, ref_length1 = 0, ref_length2 = 0;
+        boolean reference = false;
 
-        double reference = 0, len_out1 = 0, len_out2 = 0, ref_length1 = 0, ref_length2 = 0;
+        switch(estimate_flag1) {
+            case ESTIMATE: {
+                result = convertImage(img);
 
-        if (estimate_flag1 == ESTIMATE) {
-            cv.cvtColor(img, imgGray, cv.COLOR_BGR2GRAY);
-            cv.cvtColor(img, img, cv.COLOR_RGBA2RGB);
-            //cv.threshold(imgGray, imgBinary, 109, 255, cv.THRESH_BINARY_INV);
-            cv.threshold(imgGray, imgBinary, 100, 255, cv.THRESH_BINARY_INV);
+                Mat markers2 = new Mat();
+                List<MatOfPoint> cnts = new ArrayList<>();
+                cv.threshold(result, markers2, 0, 255, cv.THRESH_OTSU);
+                cv.findContours(markers2, cnts, new Mat(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
+                cv.drawContours(markers2, cnts, -1, new Scalar(255, 255, 255), cv.FILLED);
 
-            cv.erode(imgBinary, fg, new Mat(), new Point(-1, -1), 1);
-            cv.dilate(imgBinary, bg, new Mat(), new Point(-1, -1), 1);
+                MatOfPoint2f poly2f = new MatOfPoint2f();
+                List<Point> poly_point = new ArrayList<>();
 
-            //cv.threshold(bg, bg, 1, 120, cv.THRESH_BINARY_INV);
-            cv.threshold(bg, bg, 1, 80, cv.THRESH_BINARY_INV);
+                for (idx = 0; idx < cnts.size(); idx++) {
+                    if ((cv.contourArea(cnts.get(idx)) > 90)) {
+                        MatOfPoint maxMatOfPoint = cnts.get(idx);
+                        MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                        double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
+                        double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
+                        double epsilon3 = 0.005 * cv.arcLength(maxMatOfPoint2f, true);
+                        cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon2, true);
 
-            Mat markers = new Mat(imgBinary.size(), CvType.CV_8U, new Scalar(0));
-            Core.add(fg, bg, markers);
+                        poly_point = poly2f.toList();
+                        List<Point> sorted_poly_point = new ArrayList<>();
+                        if (poly_point.size() == 4) {
+                            for (i = 0; i < poly_point.size(); i++)
+                                sorted_poly_point.add(sortPolyPoint(poly_point).get(i));
+                        }
 
-            WatershedSegment segmenter = new WatershedSegment();
-            segmenter.setMarkers(markers);
+                        for (i = 0; i < sorted_poly_point.size(); i++) {
+                            if (sorted_poly_point.size() == 4) {
+                                cv.line(img, sorted_poly_point.get(i), sorted_poly_point.get((i + 1) % sorted_poly_point.size()), new Scalar(0, 0, 255), 5);
+                                cv.circle(img, new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
+                            }
+                        }
 
-            segmenter.process(img);
-            result = segmenter.getSegmentation();
-            //Core.subtract(result, bg, result);
-
-            Mat markers2 = new Mat();
-            List<MatOfPoint> cnts = new ArrayList<>();
-            cv.threshold(result, markers2, 0, 255, cv.THRESH_OTSU);
-            cv.findContours(markers2, cnts, new Mat(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
-            cv.drawContours(markers2, cnts, -1, new Scalar(255, 255, 255), cv.FILLED);
-
-            MatOfPoint2f poly2f = new MatOfPoint2f();
-            List<Point> poly_point = new ArrayList<>();
-
-            for (idx = 0; idx < cnts.size(); idx++) {
-                if ((cv.contourArea(cnts.get(idx)) > 90)) {
-                    MatOfPoint maxMatOfPoint = cnts.get(idx);
-                    MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
-                    double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
-                    double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
-                    double epsilon3 = 0.005 * cv.arcLength(maxMatOfPoint2f, true);
-                    cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon2, true);
-
-                    poly_point = poly2f.toList();
-                    List<Point> sorted_poly_point = new ArrayList<>();
-                    if (poly_point.size() == 4) {
-                        for (i=0; i<poly_point.size(); i++)
-                            sorted_poly_point.add(sortPolyPoint(poly_point).get(i));
-                    }
-
-                    for (i = 0; i < sorted_poly_point.size(); i++) {
                         if (sorted_poly_point.size() == 4) {
-                            cv.line(img, sorted_poly_point.get(i), sorted_poly_point.get((i + 1) % sorted_poly_point.size()), new Scalar(0, 0, 255), 5);
-                            cv.circle(img, new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
-                        }
-                    }
+                            double d1 = 0, d2 = 0;
+                            //레퍼런스 설정
+                            if (idx == 0 || !reference) {
+                                // 화면에 표시될 실제 레퍼런스의 길이 (real ref)
+                                len_out1 = 1.8;
+                                len_out2 = len_out1;
+                                reference = true;
 
-                    if (sorted_poly_point.size() == 4) {
-                        double d1 = 0, d2 = 0;
-                        //동전 크기의 정사각형을 레퍼런스로 설정
-                        if (idx == 0 || reference == 0) {
-                            // 화면에 표시될 실제 레퍼런스의 길이 (real ref)
-                            len_out1 = 1.8;
+                                // 화면 상에 나타난 레퍼런스의 길이 (fake ref)
+                                ref_length1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
+                                ref_length2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
 
-                            reference = len_out1 / 2.4;
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                            }
+                            // 레퍼런스가 아닌 물체 길이 측정
+                            else {
+                                // 화면 상의 물체의 길이 (fake obj)
+                                d1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
+                                d2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
 
-                            //d1 = euclidean(poly_point.get(0), poly_point.get(1));
-                            //reference = d1 / 2.4;
-                            //len_out1 = d1 / reference;
-                            len_out2 = len_out1;
+                                // 실제 물체의 길이 (real obj)
+                                len_out1 = 1.8 * (d1 / ref_length1);
+                                len_out2 = 1.8 * (d2 / ref_length2);
 
-                            // 화면 상에 나타난 레퍼런스의 길이 (fake ref)
-                            ref_length1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
-                            ref_length2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
-
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                        }
-                        // 레퍼런스가 아닌 물체 길이 측정
-                        else {
-                            // 화면 상의 물체의 길이 (fake obj)
-                            d1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
-                            d2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
-
-                            // 실제 물체의 길이 (real obj)
-                            len_out1 = 1.8 * (d1 / ref_length1);
-                            len_out2 = 1.8 * (d2 / ref_length2);
-
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                            }
                         }
                     }
                 }
+
+                display_angle(img);
+                return img;
             }
-            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", ref_length1)) + "cm_(2,3)", new Point(500, 660), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", ref_length2)) + "cm_(1,2)", new Point(500, 700), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
 
-            display_angle(img);
-            return img;
-        }
+            case ESTIMATE_WARP: {
+                img = rotate_image(img, trans);
+                result = convertImage(img);
 
-        else if (estimate_flag1 == ESTIMATE_WARP) {
-            img = rotate_image(img);
+                Mat markers2 = new Mat();
+                List<MatOfPoint> cnts = new ArrayList<>();
+                cv.threshold(result, markers2, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+                cv.findContours(markers2, cnts, new Mat(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
+                cv.drawContours(markers2, cnts, -1, new Scalar(255, 255, 255), cv.FILLED);
 
-            cv.cvtColor(img, imgGray, cv.COLOR_BGR2GRAY);
-            cv.cvtColor(img, img, cv.COLOR_RGBA2RGB);
-            cv.threshold(imgGray, imgBinary, 100, 255, cv.THRESH_BINARY_INV);
+                MatOfPoint2f poly2f = new MatOfPoint2f();
+                List<Point> poly_point = new ArrayList<>();
 
-            cv.erode(imgBinary, fg, new Mat(), new Point(-1, -1), 1);
-            cv.dilate(imgBinary, bg, new Mat(), new Point(-1, -1), 1);
+                for (idx = 0; idx < cnts.size(); idx++) {
+                    if ((cv.contourArea(cnts.get(idx)) > 90)) {
+                        MatOfPoint maxMatOfPoint = cnts.get(idx);
+                        MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
+                        double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
+                        double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
+                        double epsilon3 = 0.005 * cv.arcLength(maxMatOfPoint2f, true);
+                        cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon2, true);
 
-            cv.threshold(bg, bg, 1, 80, cv.THRESH_BINARY_INV);
+                        poly_point = poly2f.toList();
+                        List<Point> sorted_poly_point = new ArrayList<>();
+                        if (poly_point.size() == 4) {
+                            for (i = 0; i < poly_point.size(); i++)
+                                sorted_poly_point.add(sortPolyPoint(poly_point).get(i));
+                        }
 
-            Mat markers = new Mat(imgBinary.size(), CvType.CV_8U, new Scalar(0));
-            Core.add(fg, bg, markers);
+                        for (i = 0; i < sorted_poly_point.size(); i++) {
+                            if (sorted_poly_point.size() == 4) {
+                                cv.line(img, sorted_poly_point.get(i), sorted_poly_point.get((i + 1) % sorted_poly_point.size()), new Scalar(0, 0, 255), 5);
+                                cv.circle(img, new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
+                                //Imgproc.putText(img, Integer.toString(i)+"_("+Double.toString(sorted_poly_point.get(i).x)+","+Double.toString(sorted_poly_point.get(i).y)+")", new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                            }
+                        }
 
-            WatershedSegment segmenter = new WatershedSegment();
-            segmenter.setMarkers(markers);
-
-            segmenter.process(img);
-            result = segmenter.getSegmentation();
-            //Core.subtract(result, bg, result);
-
-            Mat markers2 = new Mat();
-            List<MatOfPoint> cnts = new ArrayList<>();
-            cv.threshold(result, markers2, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-            cv.findContours(markers2, cnts, new Mat(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE, new Point(0, 0));
-            cv.drawContours(markers2, cnts, -1, new Scalar(255, 255, 255), cv.FILLED);
-
-            MatOfPoint2f poly2f = new MatOfPoint2f();
-            List<Point> poly_point = new ArrayList<>();
-
-            for (idx = 0; idx < cnts.size(); idx++) {
-                if ((cv.contourArea(cnts.get(idx)) > 90)) {
-                    MatOfPoint maxMatOfPoint = cnts.get(idx);
-                    MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
-                    double epsilon1 = 0.01 * cv.arcLength(maxMatOfPoint2f, true);
-                    double epsilon2 = 0.1 * cv.arcLength(maxMatOfPoint2f, true);
-                    double epsilon3 = 0.005 * cv.arcLength(maxMatOfPoint2f, true);
-                    cv.approxPolyDP(maxMatOfPoint2f, poly2f, epsilon2, true);
-
-                    poly_point = poly2f.toList();
-                    List<Point> sorted_poly_point = new ArrayList<>();
-                    if (poly_point.size() == 4) {
-                        for (i=0; i<poly_point.size(); i++)
-                            sorted_poly_point.add(sortPolyPoint(poly_point).get(i));
-                    }
-
-                    for (i = 0; i < sorted_poly_point.size(); i++) {
+                        // 사각형인 물체만 인식
                         if (sorted_poly_point.size() == 4) {
-                            cv.line(img, sorted_poly_point.get(i), sorted_poly_point.get((i + 1) % sorted_poly_point.size()), new Scalar(0, 0, 255), 5);
-                            cv.circle(img, new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
-                            //Imgproc.putText(img, Integer.toString(i)+"_("+Double.toString(sorted_poly_point.get(i).x)+","+Double.toString(sorted_poly_point.get(i).y)+")", new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                        }
-                    }
+                            double d1 = 0, d2 = 0;
+                            //레퍼런스 설정
+                            if (idx == 0 || !reference) {
+                                // 화면에 표시될 실제 레퍼런스의 길이 (real ref)
+                                len_out1 = 1.8;
+                                len_out2 = len_out1;
+                                reference = true;
 
-                    // 사각형인 물체만 인식
-                    if (sorted_poly_point.size() == 4) {
-                        double d1 = 0, d2 = 0;
-                        //동전 크기의 정사각형을 레퍼런스로 설정
-                        if (idx == 0 || reference == 0) {
-                            // 화면에 표시될 실제 레퍼런스의 길이 (real ref)
-                            len_out1 = 1.8;
+                                // 화면 상에 나타난 레퍼런스의 길이 (fake ref)
+                                ref_length1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
+                                ref_length2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
 
-                            reference = len_out1 / 2.4;
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                            }
+                            // 레퍼런스가 아닌 물체 길이 측정
+                            else {
+                                // 화면 상의 물체의 길이 (fake obj)
+                                d1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
+                                d2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
 
-                            //d1 = euclidean(poly_point.get(0), poly_point.get(1));
-                            //reference = d1 / 2.4;
-                            //len_out1 = d1 / reference;
-                            len_out2 = len_out1;
+                                // 실제 물체의 길이 (real obj)
+                                len_out1 = 1.8 * (d1 / ref_length1);
+                                len_out2 = 1.8 * (d2 / ref_length2);
 
-                            // 화면 상에 나타난 레퍼런스의 길이 (fake ref)
-                            ref_length1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
-                            ref_length2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
-
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                        }
-                        // 레퍼런스가 아닌 물체 길이 측정
-                        else {
-                            // 화면 상의 물체의 길이 (fake obj)
-                            d1 = euclidean(sorted_poly_point.get(2), sorted_poly_point.get(3));
-                            d2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
-
-                            // 실제 물체의 길이 (real obj)
-                            len_out1 = 1.8 * (d1 / ref_length1);
-                            len_out2 = 1.8 * (d2 / ref_length2);
-
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-                            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                                Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
+                            }
                         }
                     }
                 }
+                display_angle(img);
+                return img;
             }
-            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", ref_length1)) + "cm_(2,3)", new Point(500, 660), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-            Imgproc.putText(img, Double.parseDouble(String.format("%.1f", ref_length2)) + "cm_(1,2)", new Point(500, 700), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
-
-            display_angle(img);
-            return img;
-        }
-        else {
-            display_angle(img);
-            return img;
+            default:  {
+                display_angle(img);
+                return img;
+            }
         }
     }
 
@@ -1209,6 +1159,55 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         return img;
     }
 
+    public void detectRef(Mat img) {
+        /*
+        from matplotlib import pyplot as plt
+
+                face_cascade = cv2.CascadeClassifier('haarcascade_frontface.xml')
+
+        img = cv2.imread('image.jpg')
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        faces = face_cascade.detectMultiScale(gray, 1.2, 2)
+        face_cascade
+        for (x, y, w, h) in faces:
+        cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        roi_gray = gray[y:y + h, x:x + w]
+        roi_color = img[y:y + h, x:x + w]
+
+
+        cv2.imshow('img', img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        */
+    }
+
+
+    public Mat convertImage(Mat img) {
+        Imgproc cv = new Imgproc();
+        Mat fg = new Mat();
+        Mat bg = new Mat();
+
+        cv.cvtColor(img, imgGray, cv.COLOR_BGR2GRAY);
+        cv.cvtColor(img, img, cv.COLOR_RGBA2RGB);
+        cv.threshold(imgGray, imgBinary, 100, 255, cv.THRESH_BINARY_INV);
+
+        cv.erode(imgBinary, fg, new Mat(), new Point(-1, -1), 1);
+        cv.dilate(imgBinary, bg, new Mat(), new Point(-1, -1), 1);
+
+        cv.threshold(bg, bg, 1, 80, cv.THRESH_BINARY_INV);
+
+        Mat markers = new Mat(imgBinary.size(), CvType.CV_8U, new Scalar(0));
+        Core.add(fg, bg, markers);
+
+        WatershedSegment segmenter = new WatershedSegment();
+        segmenter.setMarkers(markers);
+
+        segmenter.process(img);
+
+        return segmenter.getSegmentation();
+    }
+
     public List<Point> sortPolyPoint(List<Point> poly_point) {
         Point temp = new Point();
 
@@ -1235,7 +1234,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         return poly_point;
     }
 
-    public Mat rotate_image(Mat img) {
+    public Mat rotate_image(Mat img, Mat trans) {
         double w = (double) img.cols();
         double h = (double) img.rows();
 
@@ -1294,7 +1293,75 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         0, 0, 1, 0};
         A2.put(0, 0, data2);
 
-        Mat trans = new Mat(3, 3, CvType.CV_64FC1);
+        Core.gemm(R, A1, 1, new Mat(), 0, temp, 0);
+        Core.gemm(T, temp, 1, new Mat(), 0, temp, 0);
+        Core.gemm(A2, temp, 1, new Mat(), 0, trans, 0);
+
+        Mat result = new Mat();
+        Imgproc.warpPerspective(img, result, trans, img.size());
+
+        return result;
+    }
+
+    public Mat rerotate_image(Mat img, Mat trans) {
+        double w = (double) img.cols();
+        double h = (double) img.rows();
+
+        double dx=0, dy=0, dz=200, f=200;
+
+        Mat A1 = new Mat(4, 3, CvType.CV_64FC1);
+        double data1[] = {1, 0, -w/2,
+                0, 1, -h/2,
+                0, 0, 0,
+                0, 0, 1};
+        A1.put(0, 0, data1);
+
+        Mat rotateX = new Mat(4, 4, CvType.CV_64FC1);
+        double alpha = 90 - mAccValues[0];
+        alpha = (alpha - 90.0) * Math.PI / 180.0;
+        double dataX[] = {1, 0, 0, 0,
+                0, Math.cos(alpha), -1*Math.sin(alpha), 0,
+                0, Math.sin(alpha), Math.cos(alpha), 0,
+                0, 0, 0, 1};
+        rotateX.put(0, 0, dataX);
+
+        Mat rotateY = new Mat(4, 4, CvType.CV_64FC1);
+        double beta = 90 - mAccValues[1];
+        beta = (beta - 90.0) * Math.PI / 180.0;
+        double dataY[] = {Math.cos(beta), 0, -1*Math.sin(beta), 0,
+                0, 1, 0, 0,
+                Math.sin(beta), 0, Math.cos(beta), 0,
+                0, 0, 0, 1};
+        rotateY.put(0, 0, dataY);
+
+        Mat rotateZ = new Mat(4, 4, CvType.CV_64FC1);
+        //double gamma = 90 + (mAccValues[2] - 10);
+        double gamma = 90;
+        gamma = (gamma - 90.0) * Math.PI / 180.0;
+        double dataZ[] = {Math.cos(gamma), -1*Math.sin(gamma), 0, 0,
+                Math.sin(gamma), Math.cos(gamma), 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1};
+        rotateZ.put(0, 0, dataZ);
+
+        Mat R = new Mat(4, 4, CvType.CV_64FC1);
+        Mat temp = new Mat(4, 4, CvType.CV_64FC1);
+        Core.gemm(rotateX, rotateY, 1, new Mat(), 0, temp, 0);
+        Core.gemm(temp, rotateZ, 1, new Mat(), 0, R, 0);
+
+        Mat T = new Mat(4, 4, CvType.CV_64FC1);
+        double dataT[] = {1, 0, 0, dx,
+                0, 1, 0, dy,
+                0, 0, 1, dz,
+                0, 0, 0, 1};
+        T.put(0, 0, dataT);
+
+        Mat A2 = new Mat(3, 4, CvType.CV_64FC1);
+        double data2[] = {f, 0, w/2, 0,
+                0, f, h/2, 0,
+                0, 0, 1, 0};
+        A2.put(0, 0, data2);
+
         Core.gemm(R, A1, 1, new Mat(), 0, temp, 0);
         Core.gemm(T, temp, 1, new Mat(), 0, temp, 0);
         Core.gemm(A2, temp, 1, new Mat(), 0, trans, 0);
