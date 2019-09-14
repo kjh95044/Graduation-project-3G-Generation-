@@ -223,7 +223,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //return watershed(img);
         //return watershed_warp(img, estimate_flag);
         //return rotate_image(img);
-        return detectRef(img);
+        return detectRef2(img);
     }
 
     /* 물체 인식 & 길이 측정 */
@@ -1185,27 +1185,30 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
 
         return img;
+    }
 
-        /*
-        from matplotlib import pyplot as plt
+    public Mat detectRef2(Mat img) {
+        String cascadeFile = "cascade/haarcascade_frontface.xml";
+        CascadeClassifier refDetector = new CascadeClassifier();
 
-                face_cascade = cv2.CascadeClassifier('haarcascade_frontface.xml')
+        if (!refDetector.load(cascadeFile)) {
+            Log.i(TAG, "Xml file not loaded");
+        }
 
-        img = cv2.imread('image.jpg')
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if (!img.empty()) {
+            MatOfRect rect = new MatOfRect();
 
-        faces = face_cascade.detectMultiScale(gray, 1.2, 2)
-        face_cascade
-        for (x, y, w, h) in faces:
-        cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-        roi_gray = gray[y:y + h, x:x + w]
-        roi_color = img[y:y + h, x:x + w]
+            Imgproc.cvtColor(img, imgGray, Imgproc.COLOR_BGR2GRAY);
+            Imgproc.equalizeHist(imgGray, imgGray);
 
+            refDetector.detectMultiScale(imgGray, rect);
 
-        cv2.imshow('img', img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        */
+            for (Rect r : rect.toArray()) {
+                Imgproc.rectangle(img, new Point(r.x, r.y), new Point(r.x + r.width, r.y + r.height), new Scalar(0,255,0));
+            }
+        }
+
+        return img;
     }
 
 
