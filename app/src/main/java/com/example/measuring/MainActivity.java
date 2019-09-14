@@ -2,6 +2,7 @@ package com.example.measuring;
 
 import android.annotation.TargetApi;
 import android.app.Application;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -17,6 +18,7 @@ import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AlertDialog;
+import android.system.Os;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
@@ -30,6 +32,7 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.MatOfPoint2f;
+import org.opencv.core.MatOfRect;
 import org.opencv.core.Point;
 import org.opencv.core.RotatedRect;
 import org.opencv.core.Size;
@@ -37,9 +40,11 @@ import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Scalar;
+import org.opencv.core.Rect;
 import org.opencv.core.Core.MinMaxLocResult;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.objdetect.CascadeClassifier;
 
 import java.io.File;
 import java.io.IOException;
@@ -214,10 +219,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //return detect_poly(img);
         //return detect_rectangle(img, estimate_flag);
         //return img_segmentation(img, estimate_flag);
-        return watershed_rotate(img, estimate_flag1);
+        //return watershed_rotate(img, estimate_flag1);
         //return watershed(img);
         //return watershed_warp(img, estimate_flag);
         //return rotate_image(img);
+        return detectRef(img);
     }
 
     /* 물체 인식 & 길이 측정 */
@@ -1035,6 +1041,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         }
                     }
                 }
+
+
+
                 display_angle(img);
                 return img;
             }
@@ -1159,7 +1168,24 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         return img;
     }
 
-    public void detectRef(Mat img) {
+    public Mat detectRef(Mat img) {
+        //CascadeClassifier refDetector = new CascadeClassifier(MainActivity.class.getResource("haarcascade_frontface.xml").getPath());
+        File cascadeDir = getDir("cascade", Context.MODE_PRIVATE);
+        File mCascadeFile = new File(cascadeDir, "haarcascade_frontface.xml");
+
+        CascadeClassifier refDetector = new CascadeClassifier(mCascadeFile.getAbsolutePath());
+        refDetector.load(mCascadeFile.getAbsolutePath());
+
+        MatOfRect refDetection = new MatOfRect();
+
+        refDetector.detectMultiScale(img, refDetection);
+
+        for (Rect rect : refDetection.toArray()) {
+            Imgproc.rectangle(img, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0,255,0));
+        }
+
+        return img;
+
         /*
         from matplotlib import pyplot as plt
 
