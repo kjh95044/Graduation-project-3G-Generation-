@@ -1,5 +1,6 @@
 package com.example.measuring;
 
+import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Application;
 import android.content.Context;
@@ -15,6 +16,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AlertDialog;
@@ -47,7 +49,9 @@ import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -55,16 +59,23 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
     private static String TAG = "MainActivity";
+    private CameraBridgeViewBase cameraBridgeViewBase;
     JavaCameraView javaCameraView;
     Button EstimateButton;
     Mat img, imgGray, imgCanny, imgCnts, imgHSV, threshold, imgBinary, imgWarped, imgWarpedBinary;
+    private volatile Mat matTmpProcessingFace;
     boolean estimate_flag = false;
     int estimate_flag1 = 0;
+    private volatile int qtdFaces;
     Point refPoint[] = new Point[4];
+    private volatile boolean running = false;
 
     List<Point> ref_point = new ArrayList<>();
     List<Point> warped_ref_point = new ArrayList<>();
     List<Point> warped_point;
+
+    private CascadeClassifier cascadeClassifier;
+    private File mCascadeFile;
 
     public static final int NORMAL = 0;
     public static final int ESTIMATE = 1;
@@ -219,11 +230,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //return detect_poly(img);
         //return detect_rectangle(img, estimate_flag);
         //return img_segmentation(img, estimate_flag);
-        //return watershed_rotate(img, estimate_flag1);
+        return watershed_rotate(img, estimate_flag1);
         //return watershed(img);
         //return watershed_warp(img, estimate_flag);
         //return rotate_image(img);
-        return detectRef2(img);
+        //return detectRef2(img);
     }
 
     /* 물체 인식 & 길이 측정 */
@@ -659,8 +670,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     if (idx == 0) {
                         ref_point = new ArrayList<Point>();
                         // 화면에 표시될 실제 레퍼런스의 길이 (real ref = 2.4)
-                        len_out1 = 2.4;
-                        len_out2 = 2.4;
+                        len_out1 = 3.9;
+                        len_out2 = 3.9;
                         //dim3 = 2.4;
                         //dim4 = 2.4;
                         reference = len_out1 / 2.4;
@@ -897,6 +908,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         int idx, i;
         double len_out1 = 0, len_out2 = 0, ref_length1 = 0, ref_length2 = 0;
         boolean reference = false;
+        boolean not_object = false;
 
         switch(estimate_flag1) {
             case ESTIMATE: {
@@ -912,6 +924,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 List<Point> poly_point = new ArrayList<>();
 
                 for (idx = 0; idx < cnts.size(); idx++) {
+                    not_object = false;
                     if ((cv.contourArea(cnts.get(idx)) > 90)) {
                         MatOfPoint maxMatOfPoint = cnts.get(idx);
                         MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
@@ -929,18 +942,25 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
                         for (i = 0; i < sorted_poly_point.size(); i++) {
                             if (sorted_poly_point.size() == 4) {
+                                if ( (sorted_poly_point.get(i).x <= 10) || (sorted_poly_point.get(i).x >= 1270) ) {
+                                    not_object = true;
+                                    break;
+                                }
                                 cv.line(img, sorted_poly_point.get(i), sorted_poly_point.get((i + 1) % sorted_poly_point.size()), new Scalar(0, 0, 255), 5);
                                 cv.circle(img, new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
                             }
                         }
+
+                        if (not_object)
+                            continue;
 
                         if (sorted_poly_point.size() == 4) {
                             double d1 = 0, d2 = 0;
                             //레퍼런스 설정
                             if (idx == 0 || !reference) {
                                 // 화면에 표시될 실제 레퍼런스의 길이 (real ref)
-                                len_out1 = 1.8;
-                                len_out2 = len_out1;
+                                len_out1 = 3.9;
+                                len_out2 = 3.9;
                                 reference = true;
 
                                 // 화면 상에 나타난 레퍼런스의 길이 (fake ref)
@@ -957,8 +977,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                                 d2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
 
                                 // 실제 물체의 길이 (real obj)
-                                len_out1 = 1.8 * (d1 / ref_length1);
-                                len_out2 = 1.8 * (d2 / ref_length2);
+                                len_out1 = 3.9 * (d1 / ref_length1);
+                                len_out2 = 3.9 * (d2 / ref_length2);
 
                                 Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                                 Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
@@ -973,6 +993,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
             case ESTIMATE_WARP: {
                 img = rotate_image(img, trans);
+                Imgproc.putText(img, "Warped", new Point(600, 700), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                 result = convertImage(img);
 
                 Mat markers2 = new Mat();
@@ -985,6 +1006,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 List<Point> poly_point = new ArrayList<>();
 
                 for (idx = 0; idx < cnts.size(); idx++) {
+                    not_object = false;
                     if ((cv.contourArea(cnts.get(idx)) > 90)) {
                         MatOfPoint maxMatOfPoint = cnts.get(idx);
                         MatOfPoint2f maxMatOfPoint2f = new MatOfPoint2f(maxMatOfPoint.toArray());
@@ -1002,11 +1024,18 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
                         for (i = 0; i < sorted_poly_point.size(); i++) {
                             if (sorted_poly_point.size() == 4) {
+                                if ( (sorted_poly_point.get(i).x <= 10) || (sorted_poly_point.get(i).x >= 1270) ) {
+                                    not_object = true;
+                                    break;
+                                }
                                 cv.line(img, sorted_poly_point.get(i), sorted_poly_point.get((i + 1) % sorted_poly_point.size()), new Scalar(0, 0, 255), 5);
                                 cv.circle(img, new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), 5, new Scalar(0, 0, 255), 8);
                                 //Imgproc.putText(img, Integer.toString(i)+"_("+Double.toString(sorted_poly_point.get(i).x)+","+Double.toString(sorted_poly_point.get(i).y)+")", new Point(sorted_poly_point.get(i).x, sorted_poly_point.get(i).y), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                             }
                         }
+
+                        if (not_object)
+                            continue;
 
                         // 사각형인 물체만 인식
                         if (sorted_poly_point.size() == 4) {
@@ -1014,8 +1043,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                             //레퍼런스 설정
                             if (idx == 0 || !reference) {
                                 // 화면에 표시될 실제 레퍼런스의 길이 (real ref)
-                                len_out1 = 1.8;
-                                len_out2 = len_out1;
+                                len_out1 = 3.9;
+                                len_out2 = 3.9;
                                 reference = true;
 
                                 // 화면 상에 나타난 레퍼런스의 길이 (fake ref)
@@ -1032,8 +1061,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                                 d2 = euclidean(sorted_poly_point.get(1), sorted_poly_point.get(2));
 
                                 // 실제 물체의 길이 (real obj)
-                                len_out1 = 1.8 * (d1 / ref_length1);
-                                len_out2 = 1.8 * (d2 / ref_length2);
+                                len_out1 = 3.9 * (d1 / ref_length1);
+                                len_out2 = 3.9 * (d2 / ref_length2);
 
                                 Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out1)) + "cm_(2,3)", midPoint(sorted_poly_point.get(2), sorted_poly_point.get(3)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
                                 Imgproc.putText(img, Double.parseDouble(String.format("%.1f", len_out2)) + "cm_(1,2)", midPoint(sorted_poly_point.get(1), sorted_poly_point.get(2)), Imgproc.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255, 255, 255), 3);
@@ -1210,7 +1239,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         return img;
     }
-
 
     public Mat convertImage(Mat img) {
         Imgproc cv = new Imgproc();
@@ -1401,6 +1429,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         return result;
     }
 
+
     public Point midPoint(Point a, Point b) {
         return new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
     }
@@ -1470,6 +1499,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         });
         builder.create().show();
     }
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
